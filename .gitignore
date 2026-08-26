@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+*.numba_cache/
+
+# Environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# FITS files (model-run inputs/outputs downloaded or generated locally)
+*.fits
+
+# MCMC / nested-sampling outputs (one directory per run)
+results/
+
+# Local Claude Code project notes (not part of the package)
+CLAUDE.md
+
+# Source-specific fit configs stay local: each carries a source's
+# observation data and fit settings. cta1_config.py ships as the worked
+# example of the pattern.
+examples/*_config.py
+!examples/cta1_config.py
+
+# Sphinx build output (docs render locally and on Read the Docs)
+/docs/_build/
+
+# Tutorial notebooks are copied from examples/ by docs/conf.py at
+# build time; the copies are build products, not sources.
+/docs/tutorials/*.ipynb

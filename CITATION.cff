@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: >-
+  If you use VIPER in your research, please cite the software and the
+  model paper, Gelfand, Slane & Zhang (2009).
+title: "VIPER: Volume-Integrated PWN Evolution & Radiation"
+type: software
+authors:
+  - family-names: Alford
+    given-names: Jason
+license: BSD-3-Clause
+repository-code: "https://github.com/j-alford/viper-pwn"
+references:
+  - type: article
+    title: >-
+      A Dynamical Model for the Evolution of a Pulsar Wind Nebula Inside
+      a Nonradiative Supernova Remnant
+    authors:
+      - family-names: Gelfand
+        given-names: Joseph D.
+      - family-names: Slane
+        given-names: Patrick O.
+      - family-names: Zhang
+        given-names: Weiwei
+    journal: The Astrophysical Journal
+    volume: 703
+    issue: 2
+    start: 2051
+    end: 2067
+    year: 2009
+    doi: 10.1088/0004-637X/703/2/2051

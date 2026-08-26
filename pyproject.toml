@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viper-pwn"
+version = "0.3.0"
+description = "VIPER (Volume-Integrated PWN Evolution & Radiation)"
+readme = "README.md"
+authors = [{ name = "Jason Alford" }]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.21", "scipy>=1.7", "astropy>=5.0"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
+fast = ["numba>=0.57"]
+fit = ["emcee>=3.0", "corner"]
+gammapy = [
+    "gammapy>=2.0",
+    # gammapy 2.1 imports a private regions API removed in regions 0.12
+    # (pixel_scale_angle_at_skycoord); lift when gammapy stops doing so.
+    "regions<0.12",
+]
+nested = ["ultranest>=4.0", "scipy>=1.7"]
+docs = [
+    "sphinx>=7",
+    "pydata-sphinx-theme",
+    "myst-nb",
+    "sphinx-copybutton",
+]
+all = [
+    "matplotlib>=3.5",
+    "numba>=0.57",
+    "gammapy>=2.0",
+    "regions<0.12",
+    "emcee>=3.0",
+    "corner",
+    "ultranest>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/j-alford/viper-pwn"
+Documentation = "https://viper-pwn.readthedocs.io"
+Repository = "https://github.com/j-alford/viper-pwn"
+Issues = "https://github.com/j-alford/viper-pwn/issues"
+
+[tool.setuptools.packages.find]
+include = ["viper*"]
+
+[tool.setuptools.package-data]
+viper = ["data/*.db", "data/psrcat_ref", "data/*.npz"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests that run the full evolution model",
+]

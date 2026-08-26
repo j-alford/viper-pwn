@@ -1,0 +1,32 @@
+#!/bin/bash
+cd "$(dirname "$0")/.." && source .venv/bin/activate
+
+flags=()
+positional=()
+for arg in "$@"; do
+    if [[ "$arg" == --* ]]; then
+        flags+=("$arg")
+    else
+        positional+=("$arg")
+    fi
+done
+
+if [ ${#positional[@]} -eq 0 ]; then
+    h5=$(ls -t results/*/chain.h5 2>/dev/null | head -1)
+    if [ -z "$h5" ]; then
+        echo "No chain.h5 found in results/"; exit 1
+    fi
+    echo "Auto-detected: $h5"
+    args=("$h5")
+    run_dir=$(dirname "$h5")
+    for ref in $(ls -t results/*/best_theta.npy 2>/dev/null); do
+        if [ "$(dirname "$ref")" != "$run_dir" ]; then
+            echo "Auto-ref: $ref"
+            args+=("--ref" "$ref")
+            break
+        fi
+    done
+    python3 tools/monitor.py "${args[@]}" "${flags[@]}"
+else
+    python3 tools/monitor.py "$@"
+fi
