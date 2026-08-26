@@ -69,7 +69,7 @@ fig, _ = plot_model_sed(result, distance=model.distance.value)
 plt.show()
 ```
 
-![Broadband SED example](docs/images/sed_example.png)
+![Broadband SED example](https://raw.githubusercontent.com/j-alford/viper-pwn/main/docs/images/sed_example.png)
 
 ### Evolution history
 
@@ -80,7 +80,7 @@ radii (`rad_pwn`, `rad_snr`, `rad_rs`, `rad_psr`), velocities (`vpwn`,
 (`synch_lum_40`, `ic_lum_40`, `ad_lum_40`, `edot_40` in 10^40 erg/s),
 pressures (`ppwn`, `psnrpwn`), PWN-swept ejecta mass (`mswpwn`).
 
-![PWN evolution history grid](docs/images/evolution_grid.png)
+![PWN evolution history grid](https://raw.githubusercontent.com/j-alford/viper-pwn/main/docs/images/evolution_grid.png)
 
 Reproducer: [`docs/scripts/make_evolution_grid.py`](docs/scripts/make_evolution_grid.py).
 
