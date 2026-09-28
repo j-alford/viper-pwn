@@ -39,6 +39,22 @@ def _apply_sed_style():
     mpl.rcParams['mathtext.fontset'] = 'cm'
 
 
+def _particle_bin_edges(grid, interior, e_max_inj=None):
+    """Interior electron-bin widths and upper edges [grid units].
+
+    The bin that straddles the injection cutoff ``e_max_inj`` is
+    truncated at ``e_max_inj``: the injection fills only its lower part,
+    so dividing its count by the full width under-states the density
+    (and its upper edge would overstate the spectrum's extent).
+    """
+    bmin = grid.bin_min[interior]
+    bmax = grid.bin_max[interior].copy()
+    if e_max_inj is not None:
+        at = (bmin < e_max_inj) & (bmax > e_max_inj)
+        bmax[at] = e_max_inj
+    return bmax - bmin, bmax
+
+
 def _validate_bin_style(bin_style):
     """Raise ValueError on anything outside the enumerated set."""
     if bin_style not in _BIN_STYLE_CHOICES:

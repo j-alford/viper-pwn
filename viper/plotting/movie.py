@@ -7,6 +7,7 @@ import numpy as np
 from ..observables import ObsType
 from .. import constants as C
 from .style import (
+    _particle_bin_edges,
     _ESCAPED_COLOR,
     _FADED_STEP_DEFAULT_DEX,
     _SHADED_STEP_FILL_ALPHA,
@@ -350,9 +351,11 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
     e_gev     = grid.bin_avg[interior]
     e_ev      = e_gev * 1e9
     e_erg     = e_ev * _eV_to_erg
-    widths_ev = grid.bin_width[interior] * 1e9
+    _pw, _pbmax = _particle_bin_edges(grid, interior,
+                                      getattr(result, 'e_max_inj', None))
+    widths_ev = _pw * 1e9
     elec_bin_min_eV = grid.bin_min[interior] * 1e9
-    elec_bin_max_eV = grid.bin_max[interior] * 1e9
+    elec_bin_max_eV = _pbmax * 1e9
 
     if debug_cooling:
         _e_tev_per_bin = e_gev / 1e3

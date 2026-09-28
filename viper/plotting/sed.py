@@ -7,6 +7,7 @@ import numpy as np
 from ..observables import ObsType
 from .. import constants as C
 from .style import (
+    _particle_bin_edges,
     _FADED_STEP_DEFAULT_DEX,
     _align_ylabels_left,
     _apply_sed_style,
@@ -385,7 +386,9 @@ def plot_model_sed(result, distance, ax=None, figsize=(10, 6),
     e_gev     = grid.bin_avg[interior]
     e_ev      = e_gev * 1e9
     e_erg     = e_ev * _eV_to_erg
-    widths_ev = grid.bin_width[interior] * 1e9
+    _pw, _pbmax = _particle_bin_edges(grid, interior,
+                                      getattr(result, 'e_max_inj', None))
+    widths_ev = _pw * 1e9
     elec_spec = result.electron_spectrum[interior]
     emask     = elec_spec > 0
     dnde      = elec_spec[emask] * 1e40 / widths_ev[emask]
@@ -444,7 +447,7 @@ def plot_model_sed(result, distance, ax=None, figsize=(10, 6),
     ax_overlay.set_xlim(particle_xlim_used)
     ax_overlay.set_ylim(particle_ylim)
     elec_bin_min_eV = grid.bin_min[interior] * 1e9
-    elec_bin_max_eV = grid.bin_max[interior] * 1e9
+    elec_bin_max_eV = _pbmax * 1e9
     _plot_binned(
         ax_overlay, elec_bin_style,
         x_all, y_all,
