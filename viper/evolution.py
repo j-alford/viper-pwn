@@ -137,6 +137,10 @@ class PWNModelResult:
     escaped_spectrum: Optional[np.ndarray] = None
     # empty unless timestep_events
     events: list = field(default_factory=list)
+    # continuous-injection energy range [GeV] (None for a pure Maxwellian);
+    # lets plotters give the bin that straddles e_max its true width
+    e_min_inj: Optional[float] = None
+    e_max_inj: Optional[float] = None
 
 
 # === Adaptive timestep ===
@@ -1100,6 +1104,7 @@ def evolve_pwn(
     esc_index: float = 0.0,
     injection_model: str = 'broken_powerlaw',
     ssc_model: str = 'off',
+    snapshot_injection: str = 'included',
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1176,6 +1181,17 @@ def evolve_pwn(
         back to the sequence. Forced False under cpp_compat.
     event_dt_floor_yr : float
         Floor for the event cap [yr] (default 0.5).
+    snapshot_injection : {'included', 'excluded'}
+        What the recorded snapshots (``elecinfo``/``radinfo``, the
+        final ``electron_spectrum``/``photon_spectrum``) contain.
+        ``'included'`` (default): the grid as it stands at the end of
+        the step, i.e. cooled particles plus the particles injected
+        during that step.  ``'excluded'``: the step's own deposit is
+        subtracted first, so the snapshot is the resident (cooled)
+        population.  Near ``e_max`` the fresh deposit scales with the
+        timestep and dominates the top bins; ``'excluded'`` removes that
+        dt dependence.  Display option -- fits keep the default.  Forced
+        ``'included'`` under ``cpp_compat``.
     timestep_cooling : str
         'compat' (default; synchrotron-only bound inside
         calc_timestep) or 'total_loss10' (also cap each step at the
@@ -1216,6 +1232,7 @@ def evolve_pwn(
         timestep_events = False
         snapshot_mode = 'secant'
         timestep_cooling = 'compat'
+        snapshot_injection = 'included'
         escape_model = 'off'
         injection_model = 'broken_powerlaw'
         ssc_model = 'off'
@@ -1260,6 +1277,11 @@ def evolve_pwn(
         raise ValueError(
             f"ssc_model must be 'off' or 'uniform', got {ssc_model!r}"
         )
+    if snapshot_injection not in ('included', 'excluded'):
+        raise ValueError(
+            f"snapshot_injection must be 'included' or 'excluded', "
+            f"got {snapshot_injection!r}"
+        )
     if ssc_model != 'off' and timestep_cooling == 'compat':
         logger.warning(
             "ssc_model=%r with timestep_cooling='compat': the compat "
@@ -1283,6 +1305,9 @@ def evolve_pwn(
 
     m = C.m_ejecta_index
     result = PWNModelResult()
+    if f_max < 1:
+        result.e_min_inj = float(e_min)
+        result.e_max_inj = float(e_max)
 
     # --- SNR characteristic scales ---
     vt = calc_vt(esn_51, mej)
@@ -1448,6 +1473,26 @@ def evolve_pwn(
     if f_max > 0:
         inject_maxwellian(elec_grid, epwnkin_40 * f_max, kT_max)
 
+    # Energies deposited by the most recent step (for snapshot_injection).
+    _last_pl_e = 0.0
+    _last_mx_e = 0.0
+
+    def _snapshot_grid():
+        """Grid to record/radiate at a snapshot (see snapshot_injection)."""
+        if snapshot_injection != 'excluded' or (
+                _last_pl_e <= 0.0 and _last_mx_e <= 0.0):
+            return elec_grid
+        dep = elec_grid.copy()
+        dep.reset_number(0.0)
+        if f_max < 1 and _last_pl_e > 0.0:
+            _inject_continuous(dep, _last_pl_e)
+        if f_max > 0 and _last_mx_e > 0.0:
+            inject_maxwellian(dep, _last_mx_e, kT_max)
+        snap = elec_grid.copy()
+        snap.number = np.maximum(elec_grid.number - dep.number, 0.0)
+        snap.update_log_number()
+        return snap
+
     rad_snr = calc_rad_snr(time, t_ch, r_ch)
     vel_snr = calc_vel_snr(time, t_ch, v_ch)
     log_p_snr = (
@@ -1588,6 +1633,8 @@ def evolve_pwn(
         # Pulsar energy injection
         if rad_psr > rad_pwn and tcol != -1:
             depsr_40 = 0.0
+            _last_pl_e = 0.0
+            _last_mx_e = 0.0
         else:
             if spindown_index == 1:
                 depsr_40 = (1.0 - eta_g) * esd_40 * (
@@ -1605,13 +1652,15 @@ def evolve_pwn(
                 )
 
             # Inject new particles
+            _last_pl_e = 0.0
+            _last_mx_e = 0.0
             if f_max < 1:
                 pl_e = depsr_40 * (1.0 - eta_b) * (1.0 - f_max)
                 _inject_continuous(elec_grid, pl_e)
+                _last_pl_e = pl_e
             if f_max > 0:
-                inject_maxwellian(
-                    elec_grid, depsr_40 * (1.0 - eta_b) * f_max, kT_max
-                )
+                _last_mx_e = depsr_40 * (1.0 - eta_b) * f_max
+                inject_maxwellian(elec_grid, _last_mx_e, kT_max)
 
         epwnkin_40 += (1.0 - eta_b) * depsr_40
         epwnkin2_40 += (1.0 - eta_b) * depsr_40
@@ -1711,8 +1760,12 @@ def evolve_pwn(
             )
             result.dyninfo.append(dyn)
 
+        if (elec_step > 0 and stepnum % elec_step == 0) or (
+                phot_step > 0 and stepnum % phot_step == 0):
+            _snap = _snapshot_grid()
+
         if elec_step > 0 and stepnum % elec_step == 0:
-            result.elecinfo.append((time, elec_grid.number.copy()))
+            result.elecinfo.append((time, _snap.number.copy()))
             if escape_model != 'off':
                 result.escinfo.append((time, esc_grid.number.copy()))
 
@@ -1722,7 +1775,7 @@ def evolve_pwn(
                     else 0.99 * rad_pwn)
             _pnu_snap, _pie_snap, _mib_snap = _snapshot_ic_arrays()
             calc_photon_spectrum(
-                elec_grid, phot_grid, bpwn, orad, rad_pwn,
+                _snap, phot_grid, bpwn, orad, rad_pwn,
                 vel_pwn, _mib_snap, _pnu_snap, _pie_snap, titer,
                 snapshot_mode=snapshot_mode,
             )
@@ -1748,15 +1801,16 @@ def evolve_pwn(
     phot_grid.reset_number()
     orad = old_rad_pwn if old_rad_pwn != rad_pwn else 0.99 * rad_pwn
     _pnu_snap, _pie_snap, _mib_snap = _snapshot_ic_arrays()
+    _snap = _snapshot_grid()
     calc_photon_spectrum(
-        elec_grid, phot_grid, bpwn, orad, rad_pwn,
+        _snap, phot_grid, bpwn, orad, rad_pwn,
         vel_pwn, _mib_snap, _pnu_snap, _pie_snap, titer,
         snapshot_mode=snapshot_mode,
     )
 
     result.elec_grid = elec_grid
     result.phot_grid = phot_grid
-    result.electron_spectrum = elec_grid.number.copy()
+    result.electron_spectrum = _snap.number.copy()
     result.electron_energies = elec_grid.bin_avg.copy()
     result.photon_spectrum = phot_grid.number.copy()
     result.photon_freqs = phot_grid.bin_avg.copy()

@@ -474,7 +474,8 @@ class PWNModel:
             ic_skip_empty_bins: bool = True,
             escape_model: str = None,
             injection_model: str = None,
-            ssc_model: str = None) -> PWNModelResult:
+            ssc_model: str = None,
+            snapshot_injection: str = 'included') -> PWNModelResult:
         """Run the full PWN evolution model.
 
         Parameters
@@ -500,6 +501,10 @@ class PWNModel:
             If given, assign the corresponding model attribute before
             running (persists on the model); ``ssc_model`` is ``'off'``
             or ``'uniform'``.
+        snapshot_injection : {'included', 'excluded'}
+            Snapshot content: with the step's own injection deposit
+            (default) or the resident population only (display option;
+            see ``evolve_pwn``).
 
         Returns
         -------
@@ -563,6 +568,7 @@ class PWNModel:
             esc_index=p['esc_index'].value,
             injection_model=self.injection_model,
             ssc_model=self.ssc_model,
+            snapshot_injection=snapshot_injection,
         )
         return self._result
 
