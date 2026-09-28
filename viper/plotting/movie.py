@@ -165,6 +165,7 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
                          fade_dex=_FADED_STEP_DEFAULT_DEX,
                          debug_cooling=False,
                          show_escaped=False,
+                         reference_radii=None,
                          apply_style=True):
     """Render an MP4/GIF of the SED + particle spectrum evolving.
 
@@ -189,6 +190,16 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
         (14, 8) with both.
     start_frame, end_frame, dpi, bitrate, verbose : standard
     side_panel : bool
+    reference_radii : list of dict, optional
+        Static rings drawn on the side panel for measured sizes, e.g.
+        ``[{'radius': 1.19, 'label': 'PWN (obs.)'},
+        {'r_lo': 6.5, 'r_hi': 7.7, 'label': 'SNR (obs.)'}]`` with radii
+        in pc.  A ``radius`` entry is a thin ring; an ``r_lo``/``r_hi``
+        entry is a thin annulus (a measured range).  Optional keys
+        ``color`` (default black), ``ls`` (default ``'--'``), ``lw``
+        (default 1.0), and ``shade_lo``/``shade_hi`` (pc) to fill a
+        light annulus for the uncertainty (``shade_alpha``, default
+        0.18).  Ignored unless ``side_panel=True``.
     model : PWNModel, optional
         Required when ``show_injection=True``; supplies the spindown
         and injection-spectrum parameters.
@@ -240,7 +251,7 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
     import matplotlib.ticker as ticker
     from matplotlib.animation import FuncAnimation
     from matplotlib.collections import PolyCollection
-    from matplotlib.patches import Circle
+    from matplotlib.patches import Circle, Wedge
     from matplotlib.lines import Line2D
     from viper.particles import inject_particles
 
@@ -596,6 +607,9 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
     circle_snr = circle_pwn = circle_rs = side_text = None
     if side_panel:
         r_snr_max = max(d.rad_snr for d in dyninfo)
+        for ref in (reference_radii or []):
+            r_snr_max = max(r_snr_max, ref.get('radius', 0.0),
+                            ref.get('r_hi', 0.0), ref.get('shade_hi', 0.0))
         half = r_snr_max * 1.15
         ax_side.set_xlim(-half, half)
         ax_side.set_ylim(-half, half)
@@ -620,6 +634,29 @@ def plot_model_sed_movie(result, distance, outfile='evolution.mp4',
             Line2D([0], [0], color=PWN_COLOR, lw=12, label='PWN'),
             Line2D([0], [0], color='k', lw=1.4, ls='-', label='RS'),
         ]
+        for ref in (reference_radii or []):
+            r_color = ref.get('color', 'k')
+            r_ls = ref.get('ls', '--')
+            r_lw = ref.get('lw', 1.0)
+            r_label = ref.get('label', '')
+            if 'shade_lo' in ref and 'shade_hi' in ref:
+                ax_side.add_patch(Wedge((0, 0), ref['shade_hi'], 0, 360,
+                                        width=ref['shade_hi'] - ref['shade_lo'],
+                                        fc=r_color, ec='none',
+                                        alpha=ref.get('shade_alpha', 0.18),
+                                        zorder=4.5))
+            if 'radius' in ref:
+                ax_side.add_patch(Circle((0, 0), ref['radius'], fill=False,
+                                         lw=r_lw, ls=r_ls, color=r_color,
+                                         zorder=5))
+            else:
+                for r in (ref['r_lo'], ref['r_hi']):
+                    ax_side.add_patch(Circle((0, 0), r, fill=False,
+                                             lw=r_lw, ls=r_ls,
+                                             color=r_color, zorder=5))
+            if r_label:
+                swatches.append(Line2D([0], [0], color=r_color, lw=r_lw,
+                                       ls=r_ls, label=r_label))
         ax_side.legend(handles=swatches, loc='lower right',
                        frameon=False, fontsize=9,
                        handlelength=1.8)
