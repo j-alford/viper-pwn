@@ -21,7 +21,6 @@ from .particles import (
     inject_powerlaw,
     inject_broken_powerlaw,
     inject_maxwellian,
-    integrate_electron_energy,
     place_in_bins_batch,
 )
 from .pulsar import initial_pwn_energy
@@ -1378,7 +1377,6 @@ def evolve_pwn(
             ic_skip_empty_bins=ic_skip_empty_bins)
     pow_ic_elec = calc_pow_ic(phot_grid, pow_nu_ic)
 
-    from .radiation import HAS_NUMBA
     logger.info("IC backend: %s", "Numba JIT" if HAS_NUMBA else "NumPy (install numba for ~10x speedup)")
 
     min_ic_bin = 0
