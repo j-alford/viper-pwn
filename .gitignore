@@ -28,9 +28,6 @@ venv/
 # MCMC / nested-sampling outputs (one directory per run)
 results/
 
-# Local Claude Code project notes (not part of the package)
-CLAUDE.md
-
 # Sphinx build output (docs render locally and on Read the Docs)
 /docs/_build/
 
