@@ -18,6 +18,7 @@ API reference
    observables
    fitting
    nested
+   source
    plotting
    gammapy
    catalog

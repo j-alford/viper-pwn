@@ -150,6 +150,17 @@ Observable types: `angular_size_snr`, `angular_size_pwn`, `flux_density`
 Supports units: Hz/GHz/MHz, eV/keV/MeV/GeV/TeV, Jy/mJy,
 erg/s/cm2/Hz, photons/cm2/s/TeV, erg/s/cm2, arcmin/arcsec/deg.
 
+### Fitting from a source file (e.g. examples/g54.py)
+
+```bash
+python3 tools/run_mcmc.py my_source.py
+```
+
+Each run gets its own folder under `results/` with the chain, the best
+fit, and a copy of the source file.  The file format and the runner
+options are described in
+[Fit a source](https://viper-pwn.readthedocs.io/en/latest/getting-started/fit-a-source.html).
+
 ## Gammapy Integration
 
 VIPER includes the class `PWNSpectralModel`, which can be used

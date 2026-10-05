@@ -5,4 +5,5 @@
 
 install
 quickstart
+fit-a-source
 ```
