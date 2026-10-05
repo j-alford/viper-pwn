@@ -208,6 +208,32 @@ def plot_sed(config, theta, data_file: str = None,
                                 c=color, ls='none', marker='o',
                                 ms=4, capsize=2, label=label)
 
+            elif obs.obs_type == ObsType.BAND_FLUX:
+                # band-averaged nuFnu: F / ln(E_hi / E_lo)
+                E_lo = obs._freq_lo_hz * _h_eV
+                E_hi = obs._freq_hi_hz * _h_eV
+                E_mid = np.sqrt(E_lo * E_hi)
+                per_lnE = 1.0 / np.log(E_hi / E_lo)
+                color = _color_for_label(obs.label)
+                if color in label_once:
+                    label = ''
+                else:
+                    label = next((k for k in _DATASET_COLORS if k in obs.label),
+                                 obs.label.split('[')[0].strip())
+                    label_once[color] = True
+                y = obs.value * per_lnE
+                xerr = [[E_mid - E_lo], [E_hi - E_mid]]
+                if obs.upper_limit or obs.lower_limit:
+                    ax.errorbar(E_mid, y, xerr=xerr, yerr=y * 0.6,
+                                uplims=obs.upper_limit,
+                                lolims=obs.lower_limit, c=color, ls='none',
+                                marker='o', ms=4, label=label)
+                else:
+                    ax.errorbar(E_mid, y, xerr=xerr,
+                                yerr=obs.error * per_lnE, c=color,
+                                ls='none', marker='o', ms=4, capsize=2,
+                                label=label)
+
     # --- Residual panel ---
     if show_residuals:
         res_energies = []
@@ -249,6 +275,8 @@ def plot_sed(config, theta, data_file: str = None,
             ax_res.axhline(0, color='k', ls='-', lw=0.8)
             ax_res.axhline(-2, color='gray', ls='--', lw=0.5, alpha=0.5)
             ax_res.axhline(2, color='gray', ls='--', lw=0.5, alpha=0.5)
+            rmax = max(3.5, 1.15 * (max(abs(s) for s in res_sigmas) + 1.0))
+            ax_res.set_ylim(-rmax, rmax)
             ax_res.set_ylabel(r'Residual [$\sigma$]')
             ax_res.set_xlabel('Energy [eV]')
             ax_res.set_xscale('log')

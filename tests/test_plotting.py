@@ -112,6 +112,46 @@ def test_plot_sed_draws_non_nufnu_points(plot_inputs):
         assert any(abs(y - want) <= 1e-9 * want for y in ydata)
 
 
+def test_plot_sed_residual_panel_is_symmetric(plot_inputs):
+    fig, _ = plot_sed(plot_inputs['spec'], plot_inputs['theta'],
+                      show_residuals=True)
+    ax_res = next(a for a in fig.axes if 'Residual' in a.get_ylabel())
+    lo, hi = ax_res.get_ylim()
+    plt.close(fig)
+    assert lo == -hi
+
+
+def test_plot_sed_draws_band_flux_with_index(plot_inputs):
+    """band_flux + spectral_index over one band draw a bowtie whose
+    integral over the band is the band flux."""
+    import numpy as np
+    obs = [Observable.band_flux(2, 10, 'keV', 5.43e-12, 0.035e-12),
+           Observable.spectral_index(2, 10, 'keV', 2.09, 0.01)]
+    spec = build_fit_spec(plot_inputs['model'], obs)
+    fig, ax = plot_sed(spec, plot_inputs['theta'], show_residuals=False)
+    lines = [ln for ln in ax.get_lines()
+             if len(ln.get_xdata()) > 2
+             and np.isclose(ln.get_xdata()[0], 2000.0, rtol=1e-3)
+             and np.isclose(ln.get_xdata()[-1], 10000.0, rtol=1e-3)]
+    plt.close(fig)
+    assert len(lines) == 1
+    x, y = lines[0].get_xdata(), lines[0].get_ydata()
+    lnx = np.log(x)
+    flux = float(np.sum(0.5 * (y[1:] + y[:-1]) * np.diff(lnx)))
+    assert flux == pytest.approx(5.43e-12, rel=1e-3)
+
+
+def test_plot_sed_draws_lone_band_flux(plot_inputs):
+    """A band flux without an index is drawn at its band-averaged νFν."""
+    import numpy as np
+    obs = [Observable.band_flux(20, 100, 'keV', 7.5e-12, 3.7e-12)]
+    spec = build_fit_spec(plot_inputs['model'], obs)
+    fig, ax = plot_sed(spec, plot_inputs['theta'], show_residuals=False)
+    ys = [float(c[0].get_ydata()[0]) for c in ax.containers]
+    plt.close(fig)
+    assert any(y == pytest.approx(7.5e-12 / np.log(5.0)) for y in ys)
+
+
 def test_flux_density_to_nufnu_round_trip():
     """Inverse of _extract_flux_density's unit handling."""
     import numpy as np

@@ -104,7 +104,44 @@ def _find_bowties(observables):
                 })
                 break
 
+    # spectral_index + band_flux over the same band
+    bands = [(i, obs) for i, obs in enumerate(observables)
+             if obs.obs_type == ObsType.BAND_FLUX
+             and not (obs.upper_limit or obs.lower_limit)]
+    used_si = {bt['si_idx'] for bt in bowties}
+    used_bands = set()
+    for si_idx, si_obs in indices:
+        if si_idx in used_si:
+            continue
+        for bf_idx, bf_obs in bands:
+            if bf_idx in used_bands:
+                continue
+            if (np.isclose(bf_obs._freq_lo_hz, si_obs._freq_lo_hz)
+                    and np.isclose(bf_obs._freq_hi_hz, si_obs._freq_hi_hz)):
+                used_bands.add(bf_idx)
+                bowties.append({
+                    'E_lo_eV': si_obs._freq_lo_hz * _h_eV,
+                    'E_hi_eV': si_obs._freq_hi_hz * _h_eV,
+                    'band_flux': bf_obs.value,
+                    'band_flux_err': bf_obs.error,
+                    'gamma': si_obs.value,
+                    'gamma_err': si_obs.error,
+                    'label': _bowtie_label(si_obs, bf_obs),
+                    'color': _color_for_label(si_obs.label + bf_obs.label),
+                    'si_idx': si_idx,
+                    'fd_idx': bf_idx,
+                })
+                break
+
     return bowties
+
+
+def _band_shape(E, lo, hi, gamma):
+    """νFν(E) of a power law with unit energy flux in [lo, hi]."""
+    k = 2.0 - gamma
+    if abs(k) < 1e-9:
+        return np.full_like(E, 1.0 / np.log(hi / lo))
+    return k * E**k / (hi**k - lo**k)
 
 
 def _bowtie_label(si_obs, fd_obs):
@@ -122,6 +159,18 @@ def _draw_bowtie(ax, bt, n_points=100):
     (norm ± err) × (gamma ± err) and fills between min/max.
     """
     E = np.geomspace(bt['E_lo_eV'], bt['E_hi_eV'], n_points)
+    if 'band_flux' in bt:
+        lo, hi = bt['E_lo_eV'], bt['E_hi_eV']
+        f, df = bt['band_flux'], bt['band_flux_err']
+        g, dg = bt['gamma'], bt['gamma_err']
+        curves = np.array([(f + sf * df) * _band_shape(E, lo, hi, g + sg * dg)
+                           for sf in (-1, 1) for sg in (-1, 1)])
+        color = bt['color']
+        ax.plot(E, f * _band_shape(E, lo, hi, g), c=color, lw=1.5,
+                label=bt['label'])
+        ax.fill_between(E, curves.min(axis=0), curves.max(axis=0),
+                        color=color, alpha=0.2)
+        return
     E_piv = bt['E_piv_eV']
     norm = bt['norm']
     norm_err = bt['norm_err']
