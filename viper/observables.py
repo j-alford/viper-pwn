@@ -475,6 +475,25 @@ def _extract_flux_density(freq_hz: float, photon_freqs: np.ndarray,
     )
 
 
+def flux_density_to_nufnu(value: float, freq_hz: float,
+                          flux_unit: str) -> float:
+    """Convert a single-frequency flux measurement to νFν [erg/s/cm²].
+
+    Inverse of the unit handling in ``_extract_flux_density``; used to
+    place data points of any flux unit on an SED plot.
+    """
+    if flux_unit in ('erg/s/cm2', 'nufnu'):
+        return value
+    if flux_unit in _FLUX_DENSITY_FROM_CGS:
+        return value / _FLUX_DENSITY_FROM_CGS[flux_unit] * freq_hz
+    for eu in ('TeV', 'GeV', 'MeV', 'keV', 'eV'):
+        if flux_unit == f'photons/cm2/s/{eu}':
+            dnde_per_erg = value * _ERG_PER_ENERGY_UNIT[eu]
+            f_nu = dnde_per_erg * C.h_cgs * C.h_cgs * freq_hz
+            return f_nu * freq_hz
+    raise ValueError(f"Unknown flux unit '{flux_unit}'")
+
+
 def _extract_band_flux(freq_lo: float, freq_hi: float,
                        photon_freqs: np.ndarray,
                        photon_spectrum: np.ndarray,

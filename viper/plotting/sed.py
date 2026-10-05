@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..observables import ObsType
+from ..observables import ObsType, flux_density_to_nufnu
 from .. import constants as C
 from .style import (
     _particle_bin_edges,
@@ -194,16 +194,19 @@ def plot_sed(config, theta, data_file: str = None,
                     label = next((k for k in _DATASET_COLORS if k in obs.label), obs.label.split('[')[0].strip())
                     label_once[label_key] = True
 
-                if obs._flux_unit in ('erg/s/cm2', 'nufnu'):
-                    if obs.upper_limit:
-                        ax.errorbar(E_eV, obs.value,
-                                    yerr=obs.value * 0.6,
-                                    uplims=True, c=color, ls='none',
-                                    marker='o', ms=4, label=label)
-                    else:
-                        ax.errorbar(E_eV, obs.value, yerr=obs.error,
-                                    c=color, ls='none', marker='o',
-                                    ms=4, capsize=2, label=label)
+                nufnu_val = flux_density_to_nufnu(
+                    obs.value, obs._freq_hz, obs._flux_unit)
+                if obs.upper_limit:
+                    ax.errorbar(E_eV, nufnu_val,
+                                yerr=nufnu_val * 0.6,
+                                uplims=True, c=color, ls='none',
+                                marker='o', ms=4, label=label)
+                else:
+                    nufnu_err = flux_density_to_nufnu(
+                        obs.error, obs._freq_hz, obs._flux_unit)
+                    ax.errorbar(E_eV, nufnu_val, yerr=nufnu_err,
+                                c=color, ls='none', marker='o',
+                                ms=4, capsize=2, label=label)
 
     # --- Residual panel ---
     if show_residuals:

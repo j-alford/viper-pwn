@@ -97,6 +97,36 @@ def test_plot_sed_bin_style(plot_inputs, style):
     plt.close(fig)
 
 
+def test_plot_sed_draws_non_nufnu_points(plot_inputs):
+    """Jy/mJy and photon-flux points are converted to νFν, not skipped."""
+    from viper.observables import flux_density_to_nufnu
+    radio = Observable.flux_density(1.4, 'GHz', 433.0, 30.0, 'mJy')
+    gamma = Observable.flux_density(1.0, 'TeV', 1e-13, 1e-14,
+                                    'photons/cm2/s/TeV')
+    spec = build_fit_spec(plot_inputs['model'], [radio, gamma])
+    fig, ax = plot_sed(spec, plot_inputs['theta'], show_residuals=False)
+    ydata = {float(c[0].get_ydata()[0]) for c in ax.containers}
+    plt.close(fig)
+    for obs in (radio, gamma):
+        want = flux_density_to_nufnu(obs.value, obs._freq_hz, obs._flux_unit)
+        assert any(abs(y - want) <= 1e-9 * want for y in ydata)
+
+
+def test_flux_density_to_nufnu_round_trip():
+    """Inverse of _extract_flux_density's unit handling."""
+    import numpy as np
+    from viper.observables import (flux_density_to_nufnu,
+                                   _extract_flux_density)
+    freqs = np.logspace(5, 30, 2000)
+    spectrum = 1e-5 * (freqs / 1e9) ** -0.5  # arbitrary smooth model
+    for nu, unit in [(1.4e9, 'Jy'), (1.4e9, 'mJy'), (1.4e9, 'erg/s/cm2/Hz'),
+                     (1e26, 'erg/s/cm2'), (2.4e26, 'photons/cm2/s/TeV'),
+                     (2.4e17, 'photons/cm2/s/keV')]:
+        val = _extract_flux_density(nu, freqs, spectrum, 2000.0, unit)
+        ref = _extract_flux_density(nu, freqs, spectrum, 2000.0, 'erg/s/cm2')
+        assert flux_density_to_nufnu(val, nu, unit) == pytest.approx(ref)
+
+
 @pytest.mark.parametrize('style', STYLES)
 def test_plot_model_sed_bin_style(plot_inputs, style):
     fig, _ = plot_model_sed(
