@@ -139,27 +139,32 @@ class PulsarEntry:
         return None
 
     def _best_distance(self) -> Optional[float]:
-        """Best distance estimate [kpc]."""
+        """Best distance estimate [kpc], in the catalogue's own order.
+
+        DIST_A (an independent measurement) comes first, then the
+        DM distance (YMW16, else NE2001) clipped to the DIST_AMN/AMX
+        limits when those exist.  With only the limits, their mean.
+        """
         d = _float_or_none(self.raw.get('DIST'))
         if d is not None:
             return d
-        # AMX/AMN: association max/min distance
-        amx = _float_or_none(self.raw.get('DIST_AMX'))
-        amn = _float_or_none(self.raw.get('DIST_AMN'))
-        if amx is not None and amn is not None:
-            return 0.5 * (amx + amn)
-        if amx is not None:
-            return amx
-        if amn is not None:
-            return amn
-        # YMW16 preferred over CL02
+        d_a = _float_or_none(self.raw.get('DIST_A'))
+        if d_a is not None:
+            return d_a
         d_dm = _float_or_none(self.raw.get('DIST_DM'))
+        if d_dm is None:
+            d_dm = _float_or_none(self.raw.get('DIST_DM1'))
+        amn = _float_or_none(self.raw.get('DIST_AMN'))
+        amx = _float_or_none(self.raw.get('DIST_AMX'))
         if d_dm is not None:
+            if amn is not None and d_dm < amn:
+                return amn
+            if amx is not None and d_dm > amx:
+                return amx
             return d_dm
-        d_dm1 = _float_or_none(self.raw.get('DIST_DM1'))
-        if d_dm1 is not None:
-            return d_dm1
-        return None
+        if amn is not None and amx is not None:
+            return 0.5 * (amn + amx)
+        return amn if amn is not None else amx
 
     def __repr__(self) -> str:
         parts = [f"PulsarEntry({self.jname}"]

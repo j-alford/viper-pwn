@@ -182,6 +182,11 @@ class PWNModel:
                 self._parameters['distance']._set_internal(
                     entry.dist * 1000.0
                 )
+            elif distance is None:
+                logger.warning(
+                    "%s has no distance in the catalogue; distance stays "
+                    "at %.0f pc", entry.jname,
+                    self._parameters['distance'].value)
             logger.info(
                 "Loaded %s: P=%.6f s, Pdot=%.3e s/s, d=%.0f pc",
                 entry.jname,

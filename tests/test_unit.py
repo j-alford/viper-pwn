@@ -1172,3 +1172,31 @@ class TestLazyGammapyImport:
         r = subprocess.run([sys.executable, '-c', code],
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
+
+
+class TestCatalogueDistance:
+    """PulsarEntry.dist follows the catalogue's precedence."""
+
+    def _dist(self, **raw):
+        from viper.catalog import PulsarEntry
+        return PulsarEntry({'PSRJ': 'J0000+0000', **raw}).dist
+
+    def test_independent_measurement_first(self):
+        assert self._dist(DIST_A='5.0', DIST_DM='1.3', DIST_AMN='1.5',
+                          DIST_AMX='2.5') == 5.0
+
+    def test_dm_distance_clipped_to_limits(self):
+        assert self._dist(DIST_DM='6.2', DIST_AMN='5.0', DIST_AMX='10.0') == 6.2
+        assert self._dist(DIST_DM='10.5', DIST_AMN='0.4', DIST_AMX='3.5') == 3.5
+        assert self._dist(DIST_DM='0.2', DIST_AMN='0.4', DIST_AMX='3.5') == 0.4
+
+    def test_limits_only_give_their_mean(self):
+        assert self._dist(DIST_AMN='1.1', DIST_AMX='1.7') == pytest.approx(1.4)
+
+    def test_ne2001_fallback_and_none(self):
+        assert self._dist(DIST_DM1='2.0') == 2.0
+        assert self._dist() is None
+
+    def test_catalogue_prefers_independent_distance(self):
+        from viper.catalog import PulsarCatalog
+        assert PulsarCatalog()['J0534+2200'].dist == 2.0   # DIST_A, not the 1.3 kpc DM value

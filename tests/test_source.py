@@ -206,6 +206,12 @@ def test_pulsar_required(tmp_path):
         _build(tmp_path, base=base)
 
 
+def test_distance_required_when_catalogue_has_none(tmp_path):
+    base = BASE.replace("PULSAR = 'J1930+1852'", "PULSAR = 'J0359+5414'")
+    with pytest.raises(SourceError, match="no distance for J0359\\+5414"):
+        _build(tmp_path, "del FROZEN['distance']", base=base)
+
+
 def test_distance_required_without_catalogue(tmp_path):
     base = BASE.replace("PULSAR = 'J1930+1852'",
                         "PERIOD = 0.137 * u.s\n    P_DOT = 7.5e-13")

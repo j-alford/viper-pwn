@@ -225,6 +225,14 @@ def build_from_source(src):
     model = PWNModel()
     if blocks['PULSAR'] is not None:
         model.set_pulsar(blocks['PULSAR'])
+        named = set(blocks['PARAMETERS']) | set(blocks['FROZEN'])
+        if 'distance' not in named:
+            from .catalog import PulsarCatalog
+            if PulsarCatalog()[blocks['PULSAR']].dist is None:
+                raise SourceError(
+                    f"the catalogue has no distance for "
+                    f"{blocks['PULSAR']}; give 'distance' in PARAMETERS "
+                    f"or FROZEN.")
     if blocks['PERIOD'] is not None or blocks['P_DOT'] is not None:
         model.set_pulsar(period=blocks['PERIOD'], p_dot=blocks['P_DOT'])
 
