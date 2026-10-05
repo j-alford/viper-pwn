@@ -192,12 +192,15 @@ class TestFlatTopRange:
 
 class TestValidityGates:
 
-    def test_zero_prediction_on_regular_obs_excludes(self, fake_evolve):
-        # above spectrum -> predicted 0.0
+    def test_zero_prediction_on_regular_obs_penalized(self, fake_evolve):
+        # above spectrum -> predicted 0.0: a (value/error)^2 miss,
+        # not an exclusion
         obs = [Observable.flux_density(1e35, 'Hz', 1.0, 0.1,
                                        'erg/s/cm2/Hz')]
         spec, _ = _make_spec(obs)
-        assert F.log_likelihood(THETA, spec) == -np.inf
+        assert _predicted(obs)[0] == 0.0
+        expected = -0.5 * (1.0 / 0.1) ** 2
+        assert F.log_likelihood(THETA, spec) == pytest.approx(expected)
 
     def test_nan_spectral_index_is_unconstrained(self, monkeypatch):
         # truncated band: extraction returns NaN

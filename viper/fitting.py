@@ -304,7 +304,8 @@ def log_prior(theta: np.ndarray, spec: _FitSpec) -> float:
 def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
     """Compute log-likelihood: -1/2 chi2 comparing model to data.
 
-    Returns -inf if the model crashes (unphysical parameter combo).
+    Returns -inf if the model crashes (unphysical parameter combo) or
+    predicts NaN for a flux observable.
     """
     try:
         kw = _theta_to_evolve_args(theta, spec)
@@ -339,15 +340,11 @@ def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
         _note_eval_failure('extract_all', exc)
         return -np.inf
 
-    if np.any(np.isnan(predicted)) or np.any(predicted <= 0):
+    if np.any(np.isnan(predicted)):
         for k, obs in enumerate(spec.observables):
             if obs.obs_type.value == 'spectral_index':
                 continue
-            if obs.upper_limit or obs.lower_limit:
-                if np.isnan(predicted[k]):
-                    return -np.inf
-                continue
-            if np.isnan(predicted[k]) or predicted[k] <= 0:
+            if np.isnan(predicted[k]):
                 return -np.inf
 
     chi2 = 0.0
