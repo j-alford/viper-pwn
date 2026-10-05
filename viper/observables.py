@@ -172,7 +172,8 @@ class Observable:
 
     @classmethod
     def angular_size_snr(cls, value: float, error: float,
-                         unit: str = 'arcmin', label: str = '') -> Observable:
+                         unit: str = 'arcmin', label: str = '',
+                         weight: float = 1.0) -> Observable:
         """SNR angular radius."""
         if unit not in _ANGLE_FROM_RAD:
             raise ValueError(f"Unknown angle unit '{unit}'. Use: {list(_ANGLE_FROM_RAD.keys())}")
@@ -180,11 +181,13 @@ class Observable:
             obs_type=ObsType.ANGULAR_SIZE_SNR,
             value=value, error=error, label=label or f'θ_snr [{unit}]',
             _angle_unit=unit,
+            weight=weight,
         )
 
     @classmethod
     def angular_size_pwn(cls, value: float, error: float,
-                         unit: str = 'arcmin', label: str = '') -> Observable:
+                         unit: str = 'arcmin', label: str = '',
+                         weight: float = 1.0) -> Observable:
         """PWN angular radius."""
         if unit not in _ANGLE_FROM_RAD:
             raise ValueError(f"Unknown angle unit '{unit}'. Use: {list(_ANGLE_FROM_RAD.keys())}")
@@ -192,6 +195,7 @@ class Observable:
             obs_type=ObsType.ANGULAR_SIZE_PWN,
             value=value, error=error, label=label or f'θ_pwn [{unit}]',
             _angle_unit=unit,
+            weight=weight,
         )
 
 
@@ -236,7 +240,8 @@ class Observable:
     @classmethod
     def flux_density(cls, at: float, at_unit: str,
                      value: float, error: float, flux_unit: str,
-                     label: str = '', upper_limit: bool = False) -> Observable:
+                     label: str = '', upper_limit: bool = False,
+                     weight: float = 1.0) -> Observable:
         """Flux density at a single frequency or energy.
 
         Parameters
@@ -253,6 +258,8 @@ class Observable:
             'photons/cm2/s/TeV', 'photons/cm2/s/GeV', 'erg/s/cm2' (νFν).
         upper_limit : bool
             If True, value is an upper bound (model must be ≤ value).
+        weight : float
+            Multiplies this point's chi2 term (>1 upweights).
         """
         freq_hz = _to_hz(at, at_unit)
         ul_tag = ' [UL]' if upper_limit else ''
@@ -261,6 +268,7 @@ class Observable:
             obs_type=ObsType.FLUX_DENSITY,
             value=value, error=error, label=auto_label,
             upper_limit=upper_limit,
+            weight=weight,
             _freq_hz=freq_hz, _flux_unit=flux_unit, _energy_unit=at_unit,
         )
 
@@ -270,7 +278,8 @@ class Observable:
                   flux_unit: str = 'erg/s/cm2',
                   label: str = '',
                   lower_limit: bool = False,
-                  upper_limit: bool = False) -> Observable:
+                  upper_limit: bool = False,
+                  weight: float = 1.0) -> Observable:
         """Integrated energy flux over a band.
 
         Parameters
@@ -283,6 +292,8 @@ class Observable:
             Measured integrated flux and 1σ error.
         flux_unit : str
             Currently only 'erg/s/cm2' supported.
+        weight : float
+            Multiplies this point's chi2 term (>1 upweights).
         """
         if flux_unit != 'erg/s/cm2':
             raise ValueError(f"band_flux only supports 'erg/s/cm2', got '{flux_unit}'")
@@ -292,6 +303,7 @@ class Observable:
             value=value, error=error, label=auto_label,
             upper_limit=upper_limit,
             lower_limit=lower_limit,
+            weight=weight,
             _freq_lo_hz=_to_hz(lo, energy_unit),
             _freq_hi_hz=_to_hz(hi, energy_unit),
             _flux_unit=flux_unit, _energy_unit=energy_unit,
@@ -300,7 +312,8 @@ class Observable:
     @classmethod
     def spectral_index(cls, lo: float, hi: float, energy_unit: str,
                        value: float, error: float,
-                       label: str = '') -> Observable:
+                       label: str = '',
+                       weight: float = 1.0) -> Observable:
         """Power-law photon index Γ (dN/dE ∝ E^{-Γ}) over an energy band.
 
         Parameters
@@ -311,11 +324,14 @@ class Observable:
             Unit of lo and hi.
         value, error : float
             Measured photon index and 1σ error.
+        weight : float
+            Multiplies this point's chi2 term (>1 upweights).
         """
         auto_label = label or f'Γ({lo}-{hi} {energy_unit})'
         return cls(
             obs_type=ObsType.SPECTRAL_INDEX,
             value=value, error=error, label=auto_label,
+            weight=weight,
             _freq_lo_hz=_to_hz(lo, energy_unit),
             _freq_hi_hz=_to_hz(hi, energy_unit),
             _energy_unit=energy_unit,
