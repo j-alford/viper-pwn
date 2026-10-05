@@ -23,6 +23,7 @@ Package structure
     ├── observables.py    Extract observables (angular sizes, fluxes, indices)
     ├── fitting.py        MCMC fitting with emcee (model + observables)
     ├── nested.py         Nested-sampling with UltraNest
+    ├── source.py         Source files: one file that describes a fit
     ├── plotting/         SED, particle-spectrum, movie, and corner plots
     ├── gammapy.py        PWNSpectralModel for gammapy fitting
     ├── scalar_params.py  Scalar-dataclass API (PWNScalarParams) for one-off runs
@@ -47,6 +48,7 @@ from .fitting import (
     print_residuals, decode_theta,
 )
 from .nested import run_nested, prior_transform
+from .source import load_source, build_from_source
 from .plotting import plot_sed
 
 # Legacy import (deprecated)
@@ -84,5 +86,7 @@ __all__ = [
     "decode_theta",
     "run_nested",
     "prior_transform",
+    "load_source",
+    "build_from_source",
     "plot_sed",
 ]

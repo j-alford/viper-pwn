@@ -1,6 +1,6 @@
 #!/bin/bash
 if [ -z "$1" ]; then
-    echo "Usage: ./tools/stop_mcmc.sh results/cta1_runNN"
+    echo "Usage: ./tools/stop_mcmc.sh results/<run folder>"
     exit 1
 fi
 pid_file="$1/mcmc.pid"

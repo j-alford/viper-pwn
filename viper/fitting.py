@@ -8,6 +8,7 @@ The model's free (unfrozen) parameters define the MCMC dimensionality.
 from __future__ import annotations
 
 import logging
+import os
 import time as _time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -33,6 +34,11 @@ def _init_worker(spec):
     global _worker_spec
     _worker_spec = spec
     logging.basicConfig(level=logging.WARNING)
+    # a source file may register custom injection shapes at import
+    src = os.environ.get('VIPER_SOURCE_FILE')
+    if src:
+        from .source import load_source
+        load_source(src)
 
 def _log_prob_worker(theta):
     """Thin wrapper that reads spec from the worker global."""

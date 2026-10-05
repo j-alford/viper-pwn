@@ -31,12 +31,6 @@ results/
 # Local Claude Code project notes (not part of the package)
 CLAUDE.md
 
-# Source-specific fit configs stay local: each carries a source's
-# observation data and fit settings. cta1_config.py ships as the worked
-# example of the pattern.
-examples/*_config.py
-!examples/cta1_config.py
-
 # Sphinx build output (docs render locally and on Read the Docs)
 /docs/_build/
 

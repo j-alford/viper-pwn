@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Monitor a running CTA 1 MCMC chain via HDF5 backend.
+"""Monitor an MCMC chain (running or finished) via its HDF5 backend.
 
 Usage:
-    python3 tools/monitor.py results/cta1_run11/chain.h5
-    python3 tools/monitor.py results/cta1_run11/chain.h5 --ref results/cta1_run10/best_theta.npy
+    python3 tools/monitor.py results/g54_run02/chain.h5
+    python3 tools/monitor.py results/g54_run02/chain.h5 --ref results/g54_run01/best_theta.npy
 """
 import argparse
 import sys
@@ -11,12 +11,14 @@ import os
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, '..'))   # repo root: viper, examples.<source>_config
-sys.path.insert(0, _HERE)                       # tools/: run_mcmc
+sys.path.insert(0, os.path.join(_HERE, '..'))   # repo root: viper
 
 from viper.fitting import (
-    build_fit_spec, predict_observables, log_probability, log_prior,
+    predict_observables, log_probability, log_prior,
     _theta_to_evolve_args,
+)
+from viper.source import (
+    SourceError, build_from_source, load_run, source_settings,
 )
 
 
@@ -29,7 +31,7 @@ W = '\033[0m'
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Monitor CTA 1 MCMC')
+    parser = argparse.ArgumentParser(description='Monitor an MCMC chain')
     parser.add_argument('h5file', help='Path to chain.h5')
     parser.add_argument('--ref', help='Reference best_theta.npy for comparison',
                         default=None)
@@ -64,40 +66,17 @@ def main():
     best_lp = lps[best_idx]
     acc = np.mean(backend.accepted / backend.iteration)
 
-    run_dir = os.path.dirname(args.h5file)
-    config_file = os.path.join(run_dir, 'run_config.json')
-    run_cfg = {}
-    if os.path.exists(config_file):
-        import json
-        with open(config_file) as f:
-            run_cfg = json.load(f)
-        print(f"Config: {config_file}")
+    run_dir = os.path.dirname(os.path.abspath(args.h5file))
+    try:
+        src = load_run(run_dir)
+        model, obs, spec = build_from_source(src)
+    except SourceError as e:
+        print(e)
+        return
 
-    nsteps_total = run_cfg.get('nsteps', None)
-
-    from run_mcmc import _build_from_config
-    model, obs, _spec_unused = _build_from_config(run_cfg)
-    # build_fit_spec reads model.use_cmb_lookup
-    model.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
-
-    pwn_range = run_cfg.get('pwn_range', None)
-    if pwn_range:
-        from viper.observables import Observable
-        for i, ob in enumerate(obs):
-            if ob.range_lo is not None and 'pwn' in ob.label.lower():
-                obs[i] = Observable.angular_size_pwn_range(
-                    pwn_range[0], pwn_range[1], pwn_range[2], 'arcmin')
-                break
-
-    if run_cfg.get('gamma_upper_limits', False):
-        from dataclasses import replace as dc_replace
-        for i, ob in enumerate(obs):
-            lbl = ob.label.lower()
-            if any(k in lbl for k in ['fermi', 'wcda', 'km2a']):
-                obs[i] = dc_replace(ob, label=ob.label + ' [UL]',
-                                    upper_limit=True)
-
-    spec = build_fit_spec(model, obs, integration='pc_full')
+    # extended and nested-sampling chains run past the planned length
+    if backend.iteration <= source_settings(src)['FIT']['nsteps']:
+        nsteps_total = source_settings(src)['FIT']['nsteps']
 
     if args.theta and os.path.exists(args.theta):
         custom_theta = np.load(args.theta)

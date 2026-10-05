@@ -379,7 +379,7 @@ class PWNModel:
             )
 
     def apply_run_config(self, run_cfg: dict) -> None:
-        """Apply the source-independent run_config keys to this model.
+        """Apply model switches given as a dict (a source file's ``OPTIONS``).
 
         Consumes the evolution-level keys shared by every source:
         stepping options (``timestep_events``, ``snapshot_mode``,
@@ -403,18 +403,18 @@ class PWNModel:
         self.timestep_cooling = run_cfg.get('timestep_cooling', 'compat')
         if self.snapshot_mode not in ('secant', 'instantaneous'):
             raise ValueError(
-                f"run_config snapshot_mode must be 'secant' or "
+                f"snapshot_mode must be 'secant' or "
                 f"'instantaneous', got {self.snapshot_mode!r}")
         if self.timestep_cooling not in ('compat', 'total_loss10'):
             raise ValueError(
-                f"run_config timestep_cooling must be 'compat' or "
+                f"timestep_cooling must be 'compat' or "
                 f"'total_loss10', got {self.timestep_cooling!r}")
 
         # escape_fit bounds unfreeze esc_norm/esc_index.
         self.escape_model = run_cfg.get('escape_model', 'off')
         if self.escape_model not in ESCAPE_MODELS:
             raise ValueError(
-                f"run_config escape_model must be one of "
+                f"escape_model must be one of "
                 f"{sorted(ESCAPE_MODELS)}, got {self.escape_model!r}")
         for name in ('esc_norm', 'esc_index'):
             if name in run_cfg:
@@ -434,7 +434,7 @@ class PWNModel:
             'injection_model', 'broken_powerlaw')
         if self.injection_model not in INJECTION_MODELS:
             raise ValueError(
-                f"run_config injection_model must be one of "
+                f"injection_model must be one of "
                 f"{sorted(INJECTION_MODELS)} (or registered via "
                 f"viper.injection.register_injection_model), got "
                 f"{self.injection_model!r}")
@@ -442,7 +442,7 @@ class PWNModel:
         self.ssc_model = run_cfg.get('ssc_model', 'off')
         if self.ssc_model not in ('off', 'uniform'):
             raise ValueError(
-                f"run_config ssc_model must be 'off' or 'uniform', got "
+                f"ssc_model must be 'off' or 'uniform', got "
                 f"{self.ssc_model!r}")
 
         # Runner default True; constructor default False.
