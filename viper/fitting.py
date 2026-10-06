@@ -101,6 +101,7 @@ class _FitSpec:
     snapshot_mode: str = 'secant'
     event_dt_floor_yr: float = 0.5
     timestep_cooling: str = 'compat'
+    resolve_final_cooling: bool = False
     # Escape toggle; esc_norm/esc_index in all_values
     escape_model: str = 'off'
     # Custom shapes: register at module level; spawned workers re-import.
@@ -177,6 +178,7 @@ def _build_fit_spec(model, observables: list[Observable],
         snapshot_mode=getattr(model, 'snapshot_mode', 'secant'),
         event_dt_floor_yr=float(getattr(model, 'event_dt_floor_yr', 0.5)),
         timestep_cooling=getattr(model, 'timestep_cooling', 'compat'),
+        resolve_final_cooling=bool(getattr(model, 'resolve_final_cooling', False)),
         escape_model=getattr(model, 'escape_model', 'off'),
         injection_model=getattr(model, 'injection_model',
                                 'broken_powerlaw'),
@@ -244,6 +246,7 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         snapshot_mode=spec.snapshot_mode,
         event_dt_floor_yr=spec.event_dt_floor_yr,
         timestep_cooling=spec.timestep_cooling,
+        resolve_final_cooling=spec.resolve_final_cooling,
         escape_model=spec.escape_model,
         esc_norm=vals.get('esc_norm', 1.0),
         esc_index=vals.get('esc_index', 0.0),

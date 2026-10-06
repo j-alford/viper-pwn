@@ -131,6 +131,7 @@ density is fit when it has bounds, and held fixed otherwise.
 | | `timestep_events` | `False` |
 | | `event_dt_floor_yr` | 0.5 |
 | | `timestep_cooling` | `'compat'` |
+| | `resolve_final_cooling` (resolve fast cooling before the final spectrum) | `False` |
 | | `escape_model` | `'off'` |
 | | `injection_model` | `'broken_powerlaw'` |
 | | `ssc_model` | `'off'` |

@@ -388,7 +388,8 @@ class PWNModel:
 
         Consumes the evolution-level keys shared by every source:
         stepping options (``timestep_events``, ``snapshot_mode``,
-        ``event_dt_floor_yr``, ``timestep_cooling``), escape keys
+        ``event_dt_floor_yr``, ``timestep_cooling``,
+        ``resolve_final_cooling``), escape keys
         (``escape_model``, ``esc_norm``, ``esc_index``,
         ``escape_fit``), ``injection_model``, and ``use_cmb_lookup``.
         Observables, priors, bounds, and params stay per-source.
@@ -406,6 +407,8 @@ class PWNModel:
         self.snapshot_mode = run_cfg.get('snapshot_mode', 'secant')
         self.event_dt_floor_yr = float(run_cfg.get('event_dt_floor_yr', 0.5))
         self.timestep_cooling = run_cfg.get('timestep_cooling', 'compat')
+        self.resolve_final_cooling = bool(
+            run_cfg.get('resolve_final_cooling', False))
         if self.snapshot_mode not in ('secant', 'instantaneous'):
             raise ValueError(
                 f"snapshot_mode must be 'secant' or "
@@ -574,6 +577,7 @@ class PWNModel:
             injection_model=self.injection_model,
             ssc_model=self.ssc_model,
             snapshot_injection=snapshot_injection,
+            resolve_final_cooling=getattr(self, 'resolve_final_cooling', False),
         )
         return self._result
 

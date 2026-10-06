@@ -73,3 +73,35 @@ def test_ic_norm_evcm3_doubles_cmb_in_ic_band():
         f"eV/cm^3) at T=T_CMB. If ~1.26, the eV/cm^3 conversion in "
         f"_fill_target_field was reverted to a dimensionless multiplier."
     )
+
+
+def _crab_like_kwargs():
+    """A young, strongly magnetised nebula: electrons at e_max cool in a
+    fraction of the 0.5 yr timestep floor."""
+    return dict(
+        esn_51=1.0, mej=9.9, n_ism=0.1, braking_index=2.51, tau_sd=700.0,
+        age=300.0, e0_37=335.0, vel_psr=0.0, eta_g=0.0, eta_b=0.027,
+        e_min=0.05, e_max=2.4e6, e_break=670.0, p1=1.56, p2=2.41,
+        f_max=0.0, kT_max=0.0, n_ic=0, ic_temps=[], ic_norms=[],
+        elec_step=-1, phot_step=-1,
+    )
+
+
+def test_resolve_final_cooling_matches_refined_timesteps():
+    """With resolve_final_cooling the final spectrum agrees with a run
+    whose last steps are subdivided ten-fold; without it the synchrotron
+    cutoff region is off by tens of percent."""
+    from viper.evolution import evolve_pwn
+    kw = _crab_like_kwargs()
+    default = evolve_pwn(dyn_step=1, **kw)
+    dts = [d.delta_t for d in default.dyninfo][:-1]
+    seq = dts[:-100] + [d / 50 for d in dts[-100:] for _ in range(50)]
+    reference = evolve_pwn(replay_dt_sequence=seq, **kw)
+    resolved = evolve_pwn(resolve_final_cooling=True, **kw)
+    e_eV = default.photon_freqs * C.h_eV
+    nufnu = lambda r: r.photon_spectrum * r.photon_freqs
+    band = (e_eV > 1e4) & (e_eV < 1.5e8)
+    worst_default = np.max(np.abs(nufnu(default)[band] / nufnu(reference)[band] - 1))
+    worst_resolved = np.max(np.abs(nufnu(resolved)[band] / nufnu(reference)[band] - 1))
+    assert worst_default > 0.10
+    assert worst_resolved < 0.06

@@ -1098,6 +1098,7 @@ def evolve_pwn(
     event_dt_floor_yr: float = 0.5,
     snapshot_mode: str = 'secant',
     timestep_cooling: str = 'compat',
+    resolve_final_cooling: bool = False,
     escape_model: str = 'off',
     esc_norm: float = 1.0,
     esc_index: float = 0.0,
@@ -1196,6 +1197,11 @@ def evolve_pwn(
         calc_timestep) or 'total_loss10' (also cap each step at the
         per-bin 10%-loss time under synchrotron + IC cooling, floored
         at event_dt_floor_yr). Forced 'compat' under cpp_compat.
+    resolve_final_cooling : bool
+        In the last stretch before ``age`` (thirty default steps), let
+        the step follow the 10%-loss cooling bound below the usual
+        0.5 yr floor, so the final spectrum resolves electrons that
+        cool faster than a step.  Forced False under cpp_compat.
     snapshot_mode : str
         'secant' (default; last-step average, flux deficit linear in
         the final dt) or 'instantaneous' (the titer->0 limit). Forced
@@ -1230,6 +1236,7 @@ def evolve_pwn(
         integration = 'euler'
         timestep_events = False
         snapshot_mode = 'secant'
+        resolve_final_cooling = False
         timestep_cooling = 'compat'
         snapshot_injection = 'included'
         escape_model = 'off'
@@ -1565,6 +1572,7 @@ def evolve_pwn(
                 log_e_max_for_timestep, bpwn, nelec_40, rad_pwn, vel_pwn,
                 rad_rs, time, tmax, rad_snr, for_pwn, msw_pwn,
             )
+        _titer_floored = titer
         if _stepper is not None or timestep_cooling == 'total_loss10':
             _capped = titer
             if timestep_cooling == 'total_loss10':
@@ -1579,6 +1587,14 @@ def evolve_pwn(
                     # hand remainder back to sequence
                     _replay_dts.insert(_replay_idx, titer - _capped)
                 titer = _capped
+        if resolve_final_cooling and not _from_replay:
+            # final window of ~30 default steps: every bin the 0.5 yr
+            # floor left under-resolved relaxes over a few cooling times
+            if tmax - time <= 30.0 * _titer_floored:
+                _cb = _cooling_bound(elec_grid, bpwn, nelec_40, rad_pwn,
+                                     pow_ic_elec_step, 1e-3)
+                if _cb < titer:
+                    titer = _cb
         time += titer
 
         # Save old state

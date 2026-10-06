@@ -56,6 +56,7 @@ OPTION_DEFAULTS = {
     'snapshot_mode': 'secant',
     'event_dt_floor_yr': 0.5,
     'timestep_cooling': 'compat',
+    'resolve_final_cooling': False,
     'escape_model': 'off',
     'injection_model': 'broken_powerlaw',
     'ssc_model': 'off',
