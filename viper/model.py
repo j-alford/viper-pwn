@@ -16,7 +16,7 @@ import numpy as np
 from .parameter import Parameter, ParameterSet
 from .evolution import evolve_pwn, PWNModelResult
 from .scalar_params import check_physical_inputs
-from .pulsar import true_age_yr, e0_37_from_timing
+from .pulsar import true_age_yr, tau_sd_from_age_yr, e0_37_from_timing
 from . import constants as C
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,8 @@ class PWNModel:
         # Non-default injection forms reuse e_break/p1/p2.
         self.injection_model: str = 'broken_powerlaw'
         self.ssc_model: str = 'off'
+        # Known age [yr]: tau_sd follows from the braking index.
+        self.known_age: float | None = None
 
     # Parameter access
 
@@ -297,9 +299,21 @@ class PWNModel:
 
     # Derived quantities
 
+    def _sync_tau_sd(self) -> None:
+        """Derive tau_sd from the braking index when the age is known."""
+        if self.known_age is None:
+            return
+        p = self._parameters
+        p['tau_sd']._set_internal(tau_sd_from_age_yr(
+            p['period'].value, p['p_dot'].value,
+            p['braking_index'].value, self.known_age))
+
     @property
     def true_age(self) -> float:
         """True age of the neutron star [years]."""
+        if self.known_age is not None:
+            self._sync_tau_sd()
+            return self.known_age
         return true_age_yr(
             self._parameters['period'].value,
             self._parameters['p_dot'].value,
@@ -520,6 +534,7 @@ class PWNModel:
             Dynamics, electron and photon spectra.
         """
         self.validate()
+        self._sync_tau_sd()
         p = self._parameters
         logger.info(
             "Running PWN model: age=%.1f yr, tau_sd=%.1f yr",

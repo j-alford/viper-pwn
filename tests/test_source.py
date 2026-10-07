@@ -137,6 +137,29 @@ def test_priors(tmp_path):
     assert by_name['eta_b'].prior_log is True
 
 
+def test_known_age(tmp_path):
+    from viper.fitting import _theta_to_evolve_args
+    base = BASE.replace("        'tau_sd':        3574 * u.yr,\n", "")
+    base = base.replace("        'braking_index': 1.9,\n", "")
+    model, obs, spec = _build(
+        tmp_path, "AGE = 972 * u.yr\nPARAMETERS['braking_index'] = (2.5, 2.0, 3.0)\n", base)
+    assert model.parameters['tau_sd'].frozen
+    assert model.true_age == pytest.approx(972.0)
+    assert 'tau_sd' not in spec.param_names
+    i = spec.param_names.index('braking_index')
+    for n in (2.2, 2.8):
+        theta = np.array([(lo + hi) / 2 for lo, hi in
+                          (p.bounds for p in spec.free_params)])
+        theta[i] = n
+        kw = _theta_to_evolve_args(theta, spec)
+        assert kw['age'] == pytest.approx(972.0)
+        tau_c = spec.period / (2 * spec.p_dot) / (365.0 * 86400.0)
+        assert kw['tau_sd'] == pytest.approx(2 * tau_c / (n - 1) - 972.0,
+                                             rel=1e-6)
+    with pytest.raises(SourceError, match="tau_sd follows"):
+        _build(tmp_path, "AGE = 972 * u.yr\n")
+
+
 def test_prior_needs_units(tmp_path):
     with pytest.raises(ValueError, match='astropy Quantity'):
         _build(tmp_path, "PRIORS = {'mej': (12, 4)}")

@@ -5,6 +5,8 @@ A source file is plain Python.  It defines these module-level names:
 
 ===============  ====================================================
 ``PULSAR``       ATNF pulsar name (or ``PERIOD`` and ``P_DOT``)
+``AGE``          known age; ``tau_sd`` then follows from the braking
+                 index (optional)
 ``OBSERVABLES``  list of :class:`~viper.observables.Observable`
 ``PARAMETERS``   free parameters, ``name: (start, low, high)``
 ``FROZEN``       fixed parameters, ``name: value`` (optional)
@@ -38,7 +40,7 @@ from .observables import Observable
 SNAPSHOT_NAME = 'source.py'
 
 SOURCE_NAMES = (
-    'PULSAR', 'PERIOD', 'P_DOT', 'OBSERVABLES', 'PARAMETERS', 'FROZEN',
+    'PULSAR', 'PERIOD', 'P_DOT', 'AGE', 'OBSERVABLES', 'PARAMETERS', 'FROZEN',
     'PRIORS', 'IC_FIELDS', 'OPTIONS', 'FIT', 'NESTED',
 )
 
@@ -160,6 +162,16 @@ def _blocks(src) -> dict:
         raise SourceError(
             f"{label}: {both} appear in both PARAMETERS and FROZEN.")
     named = set(out['PARAMETERS']) | set(out['FROZEN'])
+    if out['AGE'] is not None:
+        if 'tau_sd' in named:
+            raise SourceError(
+                f"{label}: with AGE given, tau_sd follows from the "
+                f"braking index; remove it from PARAMETERS/FROZEN.")
+        if not hasattr(out['AGE'], 'unit'):
+            raise SourceError(f"{label}: AGE needs a unit, e.g. 972 * u.yr.")
+        import astropy.units as u
+        out['AGE'] = float(out['AGE'].to(u.yr).value)
+        named.add('tau_sd')
     missing = [p for p in REQUIRED_PARAMETERS if p not in named]
     if 'distance' not in named and out['PULSAR'] is None:
         missing.append('distance')
@@ -263,6 +275,11 @@ def build_from_source(src):
         par = _parameter(model, name, 'FROZEN')
         par.value = value
         par.frozen = True
+
+    if blocks['AGE'] is not None:
+        model.known_age = blocks['AGE']
+        model.parameters['tau_sd'].frozen = True
+        model._sync_tau_sd()
 
     for i, field in enumerate(blocks['IC_FIELDS'], start=1):
         unknown = sorted(set(field) - set(_IC_KEYS))

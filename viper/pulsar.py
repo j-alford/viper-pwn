@@ -57,6 +57,17 @@ def true_age_yr(
     return (2 * tau_char / (braking_index - 1)) - tau_sd
 
 
+def tau_sd_from_age_yr(
+    period: float, p_dot: float, braking_index: float, age: float
+) -> float:
+    """Spin-down timescale [years] that gives a known true age.
+
+    Inverse of :func:`true_age_yr`.
+    """
+    tau_char = period / (2 * p_dot) / (365.0 * 86400.0)
+    return (2 * tau_char / (braking_index - 1)) - age
+
+
 def e0_37_from_timing(
     period: float, p_dot: float, braking_index: float, tau_sd: float
 ) -> float:

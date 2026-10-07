@@ -17,7 +17,7 @@ import numpy as np
 
 from .evolution import evolve_pwn, PWNModelResult
 from .observables import Observable, extract_all
-from .pulsar import true_age_yr, e0_37_from_timing
+from .pulsar import true_age_yr, tau_sd_from_age_yr, e0_37_from_timing
 from . import constants as C
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,7 @@ class _FitSpec:
     injection_model: str = 'broken_powerlaw'
     # SSC toggle; no new params
     ssc_model: str = 'off'
+    known_age: float | None = None
 
     @property
     def ndim(self) -> int:
@@ -149,6 +150,11 @@ def _build_fit_spec(model, observables: list[Observable],
     if not free_params:
         raise ValueError("No free parameters. Unfreeze at least one parameter.")
 
+    known_age = getattr(model, 'known_age', None)
+    if known_age is not None and not model.parameters['tau_sd'].frozen:
+        raise ValueError(
+            "tau_sd follows from the braking index when the age is known; "
+            "it cannot be a free parameter.")
     all_values = {p.name: p.value for p in model.parameters}
 
     ic_temp_names = [f'ic_temp_{i+1}' for i in range(model.n_ic)]
@@ -183,6 +189,7 @@ def _build_fit_spec(model, observables: list[Observable],
         injection_model=getattr(model, 'injection_model',
                                 'broken_powerlaw'),
         ssc_model=getattr(model, 'ssc_model', 'off'),
+        known_age=known_age,
     )
 
 
@@ -206,9 +213,13 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
     period = vals['period']
     p_dot = vals['p_dot']
     braking_index = vals['braking_index']
-    tau_sd = vals['tau_sd']
-
-    true_age = true_age_yr(period, p_dot, braking_index, tau_sd)
+    if spec.known_age is not None:
+        tau_sd = tau_sd_from_age_yr(period, p_dot, braking_index,
+                                    spec.known_age)
+        true_age = spec.known_age
+    else:
+        tau_sd = vals['tau_sd']
+        true_age = true_age_yr(period, p_dot, braking_index, tau_sd)
     e0_37 = e0_37_from_timing(period, p_dot, braking_index, tau_sd)
 
     return dict(
