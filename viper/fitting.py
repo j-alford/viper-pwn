@@ -15,6 +15,7 @@ from typing import Optional
 
 import numpy as np
 
+from .snr import calc_trad
 from .evolution import evolve_pwn, PWNModelResult
 from .observables import Observable, extract_all
 from .pulsar import true_age_yr, tau_sd_from_age_yr, e0_37_from_timing
@@ -335,7 +336,22 @@ def log_prior(theta: np.ndarray, spec: _FitSpec) -> float:
             lp += -0.5 * ((val - mu) / sigma) ** 2
     if _age_outside_bounds(theta, spec):
         return -np.inf
+    if _snr_radiative(theta, spec):
+        return -np.inf
     return lp
+
+
+def _snr_radiative(theta: np.ndarray, spec: _FitSpec) -> bool:
+    """True when the age exceeds the remnant's radiative time.
+
+    The evolution is only followed while the supernova remnant is
+    non-radiative (``evolve_pwn`` stops at that time), so an older age
+    would be evaluated at the wrong epoch; such points are excluded.
+    """
+    vals = dict(spec.all_values)
+    for i, fp in enumerate(spec.free_params):
+        vals[fp.name] = 10.0 ** theta[i] if fp.log else theta[i]
+    return age_from_theta(theta, spec) > calc_trad(vals['esn'], vals['n_ism'])
 
 
 def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
@@ -350,6 +366,9 @@ def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
         return -np.inf
 
     if kw['age'] <= 0:
+        return -np.inf
+    if kw['age'] > calc_trad(kw['esn_51'], kw['n_ism']):
+        # the remnant is radiative: the model does not reach this age
         return -np.inf
 
     try:

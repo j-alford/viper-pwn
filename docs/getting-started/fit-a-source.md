@@ -99,6 +99,11 @@ PRIORS = {
 }
 ```
 
+Whatever the age comes from, a parameter vector whose age exceeds the
+remnant's radiative time (`2.9e4 E_51^(4/17) n_ism^(-9/17)` yr) has zero
+prior probability: the model follows the remnant only while it is
+non-radiative, so such points would be evaluated at the wrong epoch.
+
 ### Photon fields
 
 ```python

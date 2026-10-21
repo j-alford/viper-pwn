@@ -228,6 +228,21 @@ class TestValidityGates:
         assert F.log_likelihood(THETA, spec) == -np.inf
         assert len(fake_evolve) == 0   # rejected before evolve_pwn
 
+    def test_radiative_remnant_is_rejected(self, fake_evolve):
+        # trad = 2.9e4 E51^(4/17) n^(-9/17) yr: with E51 = 1 and
+        # n_ism = 100 the remnant turns radiative at ~2.5 kyr.
+        obs = [Observable.flux_density(1.4, 'GHz', 400.0, 30.0, 'Jy')]
+        spec, _ = _make_spec(obs)
+        spec.all_values['n_ism'] = 100.0
+        age = F.age_from_theta(THETA, spec)
+        from viper.snr import calc_trad
+        assert age > calc_trad(spec.all_values['esn'], 100.0)
+        assert F.log_prior(THETA, spec) == -np.inf
+        assert F.log_likelihood(THETA, spec) == -np.inf
+        assert len(fake_evolve) == 0
+        spec.all_values['n_ism'] = 1e-3
+        assert np.isfinite(F.log_prior(THETA, spec))
+
 
 # ===================================================================
 # 5. Exception swallowing is logged (once per distinct failure)
