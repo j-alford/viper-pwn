@@ -298,6 +298,16 @@ class Observable:
             Currently only 'erg/s/cm2' supported.
         weight : float
             Multiplies this point's chi2 term (>1 upweights).
+        aperture_arcmin : float, optional
+            Angular radius the flux was measured inside.  The model's
+            total band flux is scaled by
+            (aperture_arcmin / theta_pwn)**aperture_index before the
+            comparison, where theta_pwn is the model's PWN angular
+            radius at that parameter point.  Leave unset to compare
+            the total flux.
+        aperture_index : float
+            Exponent of the enclosed-flux law F(<theta) ∝ theta**k;
+            1.5 for surface brightness falling as r^-0.5.
         """
         if flux_unit != 'erg/s/cm2':
             raise ValueError(f"band_flux only supports 'erg/s/cm2', got '{flux_unit}'")
