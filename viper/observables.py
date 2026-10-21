@@ -106,6 +106,8 @@ class Observable:
     weight: float = 1.0       # chi2 weight (>1 upweights)
     range_lo: Optional[float] = None  # flat-top lower bound
     range_hi: Optional[float] = None  # flat-top upper bound
+    aperture_arcmin: Optional[float] = None
+    aperture_index: float = 1.5
 
     # Internal, set by class methods (Hz/CGS)
     _freq_hz: float = 0.0           # for flux_density
@@ -279,7 +281,9 @@ class Observable:
                   label: str = '',
                   lower_limit: bool = False,
                   upper_limit: bool = False,
-                  weight: float = 1.0) -> Observable:
+                  weight: float = 1.0,
+                  aperture_arcmin: Optional[float] = None,
+                  aperture_index: float = 1.5) -> Observable:
         """Integrated energy flux over a band.
 
         Parameters
@@ -297,13 +301,19 @@ class Observable:
         """
         if flux_unit != 'erg/s/cm2':
             raise ValueError(f"band_flux only supports 'erg/s/cm2', got '{flux_unit}'")
+        if aperture_arcmin is not None and aperture_arcmin <= 0:
+            raise ValueError(f"band_flux: aperture_arcmin must be > 0, got {aperture_arcmin}")
         auto_label = label or f'F({lo}-{hi} {energy_unit}) [{flux_unit}]'
+        if aperture_arcmin is not None and not label:
+            auto_label += f" <{aperture_arcmin:g}'"
         return cls(
             obs_type=ObsType.BAND_FLUX,
             value=value, error=error, label=auto_label,
             upper_limit=upper_limit,
             lower_limit=lower_limit,
             weight=weight,
+            aperture_arcmin=aperture_arcmin,
+            aperture_index=aperture_index,
             _freq_lo_hz=_to_hz(lo, energy_unit),
             _freq_hi_hz=_to_hz(hi, energy_unit),
             _flux_unit=flux_unit, _energy_unit=energy_unit,
@@ -377,10 +387,14 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
         )
 
     elif obs.obs_type == ObsType.BAND_FLUX:
-        return _extract_band_flux(
+        flux = _extract_band_flux(
             obs._freq_lo_hz, obs._freq_hi_hz,
             photon_freqs, photon_spectrum, distance_pc,
         )
+        if obs.aperture_arcmin is not None:
+            theta_pwn = _extract_angular_size(rad_pwn_pc, distance_pc, 'arcmin')
+            flux *= (obs.aperture_arcmin / theta_pwn) ** obs.aperture_index
+        return flux
 
     elif obs.obs_type == ObsType.SPECTRAL_INDEX:
         return _extract_spectral_index(
