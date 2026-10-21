@@ -209,6 +209,21 @@ def main():
     for i, fp in enumerate(spec.free_params):
         lo, hi = fp.bounds
         p0[:, i] = np.clip(p0[:, i], lo + 1e-10, hi - 1e-10)
+    # Walkers must start where the prior is finite (an AGE range can cut a
+    # thin slice through the scatter ball); redraw the ones that do not.
+    bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
+    for _ in range(1000):
+        if not bad.any():
+            break
+        p0[bad] = p0_center + scales * rng.standard_normal((bad.sum(), spec.ndim))
+        for i, fp in enumerate(spec.free_params):
+            lo, hi = fp.bounds
+            p0[bad, i] = np.clip(p0[bad, i], lo + 1e-10, hi - 1e-10)
+        bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
+    if bad.any():
+        print(f"{bad.sum()} of {nwalkers} walkers still start outside the prior "
+              f"after 1000 redraws; reduce FIT['scatter'] or move the start.")
+        return 2
 
     if new_from_file:
         start_run(args.target, outdir)

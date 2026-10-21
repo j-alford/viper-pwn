@@ -5,7 +5,9 @@ A source file is plain Python.  It defines these module-level names:
 
 ===============  ====================================================
 ``PULSAR``       ATNF pulsar name (or ``PERIOD`` and ``P_DOT``)
-``AGE``          known age; ``tau_sd`` then follows from the braking
+``AGE``          known age (``tau_sd`` then follows from the braking
+                 index) or an allowed (low, high) age range; ``tau_sd``
+                 then follows from the braking
                  index (optional)
 ``OBSERVABLES``  list of :class:`~viper.observables.Observable`
 ``PARAMETERS``   free parameters, ``name: (start, low, high)``
@@ -162,7 +164,19 @@ def _blocks(src) -> dict:
         raise SourceError(
             f"{label}: {both} appear in both PARAMETERS and FROZEN.")
     named = set(out['PARAMETERS']) | set(out['FROZEN'])
-    if out['AGE'] is not None:
+    out['AGE_RANGE'] = None
+    if out['AGE'] is not None and getattr(out['AGE'], 'size', 1) == 2:
+        # an age range: tau_sd and the braking index stay free, the fit
+        # rejects points whose true age is outside
+        if not hasattr(out['AGE'], 'unit'):
+            raise SourceError(f"{label}: AGE needs a unit, e.g. (1400, 2400) * u.yr.")
+        import astropy.units as u
+        lo, hi = (float(x) for x in out['AGE'].to(u.yr).value)
+        if not lo < hi:
+            raise SourceError(f"{label}: AGE range must be (low, high) with low < high.")
+        out['AGE_RANGE'] = (lo, hi)
+        out['AGE'] = None
+    elif out['AGE'] is not None:
         if 'tau_sd' in named:
             raise SourceError(
                 f"{label}: with AGE given, tau_sd follows from the "
@@ -280,6 +294,8 @@ def build_from_source(src):
         model.known_age = blocks['AGE']
         model.parameters['tau_sd'].frozen = True
         model._sync_tau_sd()
+    if blocks.get('AGE_RANGE') is not None:
+        model.age_bounds = blocks['AGE_RANGE']
 
     for i, field in enumerate(blocks['IC_FIELDS'], start=1):
         unknown = sorted(set(field) - set(_IC_KEYS))

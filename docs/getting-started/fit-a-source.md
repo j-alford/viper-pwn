@@ -22,7 +22,7 @@ A source file is plain Python.  It defines these names:
 | `PARAMETERS` | parameters to fit, `name: (start, low, high)` | yes |
 | `FROZEN` | parameters held fixed, `name: value` | for every model parameter not being fit |
 | `PRIORS` | Gaussian priors, `name: (center, sigma)` | no |
-| `AGE` | known age; `tau_sd` then follows from the braking index | no |
+| `AGE` | known age (`tau_sd` then follows from the braking index), or an allowed `(low, high)` age range with `tau_sd` and the braking index both free | no |
 | `IC_FIELDS` | photon fields for inverse-Compton scattering, on top of the CMB | no |
 | `OPTIONS` | model switches | no |
 | `FIT` | MCMC settings | no |

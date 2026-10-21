@@ -116,6 +116,9 @@ class PWNModel:
         self.ssc_model: str = 'off'
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
+        # Allowed age range [yr] with tau_sd and the braking index both
+        # free: the fit rejects parameter vectors whose true age is outside.
+        self.age_bounds: tuple[float, float] | None = None
 
     # Parameter access
 

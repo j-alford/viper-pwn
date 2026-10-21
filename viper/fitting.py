@@ -109,6 +109,7 @@ class _FitSpec:
     # SSC toggle; no new params
     ssc_model: str = 'off'
     known_age: float | None = None
+    age_bounds: tuple[float, float] | None = None
 
     @property
     def ndim(self) -> int:
@@ -190,6 +191,7 @@ def _build_fit_spec(model, observables: list[Observable],
                                 'broken_powerlaw'),
         ssc_model=getattr(model, 'ssc_model', 'off'),
         known_age=known_age,
+        age_bounds=getattr(model, 'age_bounds', None),
     )
 
 
@@ -290,6 +292,25 @@ def _note_eval_failure(stage: str, exc: Exception) -> None:
         logger.debug("log_likelihood: %s raised %r -> -inf", stage, exc)
 
 
+def age_from_theta(theta: np.ndarray, spec: _FitSpec) -> float:
+    """True age [yr] implied by a parameter vector (free or frozen values)."""
+    if spec.known_age is not None:
+        return spec.known_age
+    vals = dict(spec.all_values)
+    for i, fp in enumerate(spec.free_params):
+        vals[fp.name] = 10.0 ** theta[i] if fp.log else theta[i]
+    return true_age_yr(vals['period'], vals['p_dot'],
+                       vals['braking_index'], vals['tau_sd'])
+
+
+def _age_outside_bounds(theta: np.ndarray, spec: _FitSpec) -> bool:
+    if spec.age_bounds is None:
+        return False
+    lo, hi = spec.age_bounds
+    age = age_from_theta(theta, spec)
+    return not (lo <= age <= hi)
+
+
 def log_prior(theta: np.ndarray, spec: _FitSpec) -> float:
     """Compute log-prior for a parameter vector.
 
@@ -312,6 +333,8 @@ def log_prior(theta: np.ndarray, spec: _FitSpec) -> float:
             else:
                 val = 10**theta[i] if fp.log else theta[i]
             lp += -0.5 * ((val - mu) / sigma) ** 2
+    if _age_outside_bounds(theta, spec):
+        return -np.inf
     return lp
 
 

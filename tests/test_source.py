@@ -160,6 +160,36 @@ def test_known_age(tmp_path):
         _build(tmp_path, "AGE = 972 * u.yr\n")
 
 
+def test_age_range(tmp_path):
+    from viper.fitting import log_prior, age_from_theta
+    model, obs, spec = _build(
+        tmp_path, "AGE = (2000, 4000) * u.yr\n"
+        "PARAMETERS['braking_index'] = (2.5, 2.0, 3.0)\n"
+        "PARAMETERS['tau_sd'] = (3574 * u.yr, 100 * u.yr, 30000 * u.yr)\n",
+        BASE.replace("        'tau_sd':        3574 * u.yr,\n", "")
+            .replace("        'braking_index': 1.9,\n", ""))
+    assert model.age_bounds == (2000.0, 4000.0)
+    assert not model.parameters['tau_sd'].frozen
+    theta = np.array([(lo + hi) / 2 for lo, hi in
+                      (p.bounds for p in spec.free_params)])
+    i_n = spec.param_names.index('braking_index')
+    i_t = spec.param_names.index('tau_sd')
+    tau_c = spec.period / (2 * spec.p_dot) / (365.0 * 86400.0)
+    theta[i_n] = 2.5
+    for tau, inside in ((2 * tau_c / 1.5 - 3000.0, True),
+                        (2 * tau_c / 1.5 - 1000.0, False)):
+        theta[i_t] = np.log10(tau) if spec.free_params[i_t].log else tau
+        assert age_from_theta(theta, spec) == pytest.approx(
+            2 * tau_c / 1.5 - tau, rel=1e-6)
+        assert np.isfinite(log_prior(theta, spec)) == inside
+    with pytest.raises(SourceError, match="low < high"):
+        _build(tmp_path, "AGE = (4000, 2000) * u.yr\n"
+               "PARAMETERS['braking_index'] = (2.5, 2.0, 3.0)\n"
+               "PARAMETERS['tau_sd'] = (3574 * u.yr, 100 * u.yr, 30000 * u.yr)\n",
+               BASE.replace("        'tau_sd':        3574 * u.yr,\n", "")
+                   .replace("        'braking_index': 1.9,\n", ""))
+
+
 def test_prior_needs_units(tmp_path):
     with pytest.raises(ValueError, match='astropy Quantity'):
         _build(tmp_path, "PRIORS = {'mej': (12, 4)}")
