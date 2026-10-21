@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..observables import ObsType, flux_density_to_nufnu
+from ..observables import ObsType, aperture_fraction, flux_density_to_nufnu
 from .. import constants as C
 from .style import (
     _particle_bin_edges,
@@ -152,17 +152,21 @@ def plot_sed(config, theta, data_file: str = None,
         label=model_label, zorder=5,
     )
     rad_pwn_pc = result.dyninfo[-1].rad_pwn
+    aperture_labels = set()
     for obs in config.observables:
         if obs.obs_type != ObsType.BAND_FLUX or obs.aperture_arcmin is None:
             continue
         theta_pwn = np.degrees(rad_pwn_pc / distance) * 60.0
-        factor = (obs.aperture_arcmin / theta_pwn) ** obs.aperture_index
+        factor = aperture_fraction(obs.aperture_arcmin, theta_pwn,
+                                   obs.aperture_index)
         E_lo = obs._freq_lo_hz * _h_eV
         E_hi = obs._freq_hi_hz * _h_eV
         sel = mask & (energy_eV >= E_lo) & (energy_eV <= E_hi)
+        label = f"model inside {obs.aperture_arcmin:g}'"
         ax.plot(energy_eV[sel], nufnu[sel] * factor, c=model_color, ls='--',
                 lw=model_lw, zorder=6,
-                label=f"model inside {obs.aperture_arcmin:g}'")
+                label=None if label in aperture_labels else label)
+        aperture_labels.add(label)
 
     # --- Detect and draw bowties ---
     bowties = _find_bowties(config.observables)

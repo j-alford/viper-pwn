@@ -107,7 +107,7 @@ class Observable:
     range_lo: Optional[float] = None  # flat-top lower bound
     range_hi: Optional[float] = None  # flat-top upper bound
     aperture_arcmin: Optional[float] = None
-    aperture_index: float = 1.5
+    aperture_index: Optional[float] = None
 
     # Internal, set by class methods (Hz/CGS)
     _freq_hz: float = 0.0           # for flux_density
@@ -283,7 +283,7 @@ class Observable:
                   upper_limit: bool = False,
                   weight: float = 1.0,
                   aperture_arcmin: Optional[float] = None,
-                  aperture_index: float = 1.5) -> Observable:
+                  aperture_index: Optional[float] = None) -> Observable:
         """Integrated energy flux over a band.
 
         Parameters
@@ -300,14 +300,14 @@ class Observable:
             Multiplies this point's chi2 term (>1 upweights).
         aperture_arcmin : float, optional
             Angular radius the flux was measured inside.  The model's
-            total band flux is scaled by
-            (aperture_arcmin / theta_pwn)**aperture_index before the
-            comparison, where theta_pwn is the model's PWN angular
-            radius at that parameter point.  Leave unset to compare
-            the total flux.
-        aperture_index : float
-            Exponent of the enclosed-flux law F(<theta) ∝ theta**k;
-            1.5 for surface brightness falling as r^-0.5.
+            total band flux is scaled to the fraction that falls
+            inside this radius before the comparison, for a uniformly
+            emitting sphere of the model's PWN angular radius at that
+            parameter point.  Leave unset to compare the total flux.
+        aperture_index : float, optional
+            Use a measured enclosed-flux law F(<theta) ∝ theta**k
+            instead of the uniform sphere; k = 1.5 for surface
+            brightness falling as r^-0.5.
         """
         if flux_unit != 'erg/s/cm2':
             raise ValueError(f"band_flux only supports 'erg/s/cm2', got '{flux_unit}'")
@@ -403,7 +403,8 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
         )
         if obs.aperture_arcmin is not None:
             theta_pwn = _extract_angular_size(rad_pwn_pc, distance_pc, 'arcmin')
-            flux *= (obs.aperture_arcmin / theta_pwn) ** obs.aperture_index
+            flux *= aperture_fraction(obs.aperture_arcmin, theta_pwn,
+                                      obs.aperture_index)
         return flux
 
     elif obs.obs_type == ObsType.SPECTRAL_INDEX:
@@ -429,6 +430,16 @@ def extract_all(observables: list[Observable],
 
 
 # Internal extraction functions
+
+def aperture_fraction(aperture: float, theta_pwn: float,
+                      index: Optional[float] = None) -> float:
+    x = aperture / theta_pwn
+    if index is not None:
+        return x ** index
+    if x >= 1.0:
+        return 1.0
+    return 1.0 - (1.0 - x * x) ** 1.5
+
 
 def _extract_angular_size(radius_pc: float, distance_pc: float,
                           unit: str) -> float:

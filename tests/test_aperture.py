@@ -12,7 +12,8 @@ def test_aperture_scaling_matches_power_law():
     freqs, spec = _flat_spectrum()
     d = 1000.0
     total = Observable.band_flux(0.5, 3.0, 'keV', 1e-12, 1e-13)
-    ap = Observable.band_flux(0.5, 3.0, 'keV', 1e-12, 1e-13, aperture_arcmin=12.0)
+    ap = Observable.band_flux(0.5, 3.0, 'keV', 1e-12, 1e-13, aperture_arcmin=12.0,
+                              aperture_index=1.5)
     for rad_pc in (2.0, 3.49, 6.0):
         theta = np.degrees(rad_pc / d) * 60.0
         f_tot = extract_observable(total, freqs, spec, rad_pc, 10.0, d)
@@ -28,6 +29,19 @@ def test_aperture_index_two_is_area_scaling():
     rad_pc = d * np.radians(12.0 / 60.0)
     assert np.isclose(extract_observable(ap, freqs, spec, rad_pc, 10.0, d),
                       0.25 * extract_observable(total, freqs, spec, rad_pc, 10.0, d))
+
+
+def test_uniform_sphere_is_the_default():
+    freqs, spec = _flat_spectrum()
+    d = 1000.0
+    total = Observable.band_flux(0.5, 3.0, 'keV', 1e-12, 1e-13)
+    ap = Observable.band_flux(0.5, 3.0, 'keV', 1e-12, 1e-13, aperture_arcmin=12.0)
+    assert ap.aperture_index is None
+    for arcmin, frac in ((6.0, 1.0), (12.0, 1.0), (24.0, 1.0 - 0.75 ** 1.5)):
+        rad_pc = d * np.radians(arcmin / 60.0)
+        f_tot = extract_observable(total, freqs, spec, rad_pc, 10.0, d)
+        f_ap = extract_observable(ap, freqs, spec, rad_pc, 10.0, d)
+        assert np.isclose(f_ap, f_tot * frac)
 
 
 def test_default_is_unchanged():
