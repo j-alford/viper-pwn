@@ -69,10 +69,16 @@ def tau_sd_from_age_yr(
 
 
 def e0_37_from_timing(
-    period: float, p_dot: float, braking_index: float, tau_sd: float
+    period: float, p_dot: float, braking_index: float, tau_sd: float,
+    i_ns: float = 1.0,
 ) -> float:
-    """Initial spin-down luminosity [10^37 erg/s] from timing parameters."""
-    e_dot_current = 4.0 * np.pi**2 * C.I_ns * p_dot / period**3
+    """Initial spin-down luminosity [10^37 erg/s] from timing parameters.
+
+    ``i_ns`` is the neutron-star moment of inertia in units of
+    ``C.I_ns`` (10^45 g cm^2); the present spin-down power and the whole
+    injection history scale with it.
+    """
+    e_dot_current = 4.0 * np.pi**2 * C.I_ns * i_ns * p_dot / period**3
     n_idx = (braking_index + 1) / (braking_index - 1)
     age = true_age_yr(period, p_dot, braking_index, tau_sd)
     return e_dot_current * (1 + age / tau_sd) ** n_idx / 1.0e37

@@ -43,6 +43,7 @@ _PARAM_DEFS = [
     ('p_dot',   None,  True,  False, None,     1.0,   'Period derivative [s/s, dimensionless]'),
     ('braking_index', 2.5, True, False, None,  1.0,   'Braking index'),
     ('tau_sd',  3000., True,  True,  'yr',     1.0,   'Spin-down timescale [yr]'),
+    ('i_ns',    1.0,   True,  True,  'g cm2',  1e-45, 'NS moment of inertia [internal: 10^45 g cm^2]'),
     # -- Pulsar wind --
     ('eta_b',   0.01,  True,  True,  None,     1.0,   'Wind magnetisation fraction'),
     ('e_min',   3.0,   True,  True,  'GeV',    1.0,   'Min particle energy [GeV]'),
@@ -63,6 +64,14 @@ _PARAM_DEFS = [
 ]
 
 
+# Default fit bounds for parameters that have a natural range.  The
+# moment of inertia of a neutron star lies between ~0.3 and ~3 x 10^45
+# g cm^2 for any equation of state.
+_DEFAULT_BOUNDS = {   # internal units
+    'i_ns': (0.3, 3.0),
+}
+
+
 def _build_default_parameters() -> ParameterSet:
     """Create the default parameter set from definitions."""
     u = None  # lazy
@@ -77,6 +86,7 @@ def _build_default_parameters() -> ParameterSet:
         params.append(Parameter(
             name=name, default=val, frozen=frozen, log=log,
             unit=unit, scale=scale, description=desc,
+            bounds=_DEFAULT_BOUNDS.get(name),
         ))
     return ParameterSet(params)
 
@@ -332,6 +342,7 @@ class PWNModel:
             self._parameters['p_dot'].value,
             self._parameters['braking_index'].value,
             self._parameters['tau_sd'].value,
+            self._parameters['i_ns'].value,
         )
 
     @property
@@ -373,6 +384,7 @@ class PWNModel:
                 e_break=prm['e_break'].value,
                 p1=prm['p1'].value, p2=prm['p2'].value,
                 f_max=prm['f_max'].value, vel_psr=prm['vel_psr'].value,
+                i_ns=prm['i_ns'].value,
                 kT_max=prm['kT_max'].value,
                 distance=prm['distance'].value,
                 n_ic=self.n_ic, ic_temps=self.ic_temps,

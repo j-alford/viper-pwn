@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def check_physical_inputs(*, esn, mej, n_ism, braking_index, tau_sd,
                      period, p_dot, eta_b, eta_g, e_min, e_max,
                      e_break, p1, p2, f_max, vel_psr,
-                     kT_max=0.0, distance=1000.0,
+                     kT_max=0.0, distance=1000.0, i_ns=1.0,
                      n_ic=0, ic_temps=(), ic_norms=()) -> list[str]:
     """Shared physics-range validation for BOTH scalar APIs.
 
@@ -98,6 +98,8 @@ def check_physical_inputs(*, esn, mej, n_ism, braking_index, tau_sd,
                     f"ic_norms[{i}] must be >= 0 and finite, got {nrm}"
                 )
 
+    if i_ns <= 0:
+        problems.append(f"i_ns = {i_ns} must be > 0 (units of 10^45 g cm^2)")
     if braking_index == 1:
         problems.append(
             "braking_index must not be 1 (division by zero in spindown_index)"
@@ -190,6 +192,7 @@ class PWNScalarParams:
     distance: float = 1000.0  # pc
 
     # Optional physics
+    i_ns: float = 1.0  # NS moment of inertia, 10^45 g cm^2
     eta_g: float = 0.0
     vel_psr: float = 0.0  # cm/s
     f_max: float = 0.0
@@ -225,7 +228,7 @@ class PWNScalarParams:
             eta_b=self.eta_b, eta_g=self.eta_g,
             e_min=self.e_min, e_max=self.e_max, e_break=self.e_break,
             p1=self.p1, p2=self.p2,
-            f_max=self.f_max, vel_psr=self.vel_psr,
+            f_max=self.f_max, vel_psr=self.vel_psr, i_ns=self.i_ns,
             kT_max=self.kT_max, distance=self.distance,
             n_ic=self.n_ic, ic_temps=self.ic_temps,
             ic_norms=self.ic_norms,
@@ -246,7 +249,8 @@ class PWNScalarParams:
     def e0_37(self) -> float:
         """Initial spin-down luminosity [10^37 erg/s]."""
         return e0_37_from_timing(self.period, self.p_dot,
-                                 self.braking_index, self.tau_sd)
+                                 self.braking_index, self.tau_sd,
+                                 self.i_ns)
 
     @property
     def spindown_index(self) -> float:

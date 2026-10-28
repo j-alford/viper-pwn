@@ -223,7 +223,8 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
     else:
         tau_sd = vals['tau_sd']
         true_age = true_age_yr(period, p_dot, braking_index, tau_sd)
-    e0_37 = e0_37_from_timing(period, p_dot, braking_index, tau_sd)
+    e0_37 = e0_37_from_timing(period, p_dot, braking_index, tau_sd,
+                              vals['i_ns'])
 
     return dict(
         esn_51=vals['esn'],
