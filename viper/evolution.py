@@ -1424,6 +1424,11 @@ def evolve_pwn(
         _k2_ssc = ic_cache.cached_k2(elec_grid, phot_grid, target_grid)
         _tgt_dnu = target_grid.bin_width.copy()
         _ssc_tgt = make_log_grid(target_freq_min, target_freq_max, nt)
+        # emission tensor only where the grid is fixed (cache can hit)
+        _ssc_tensor = (ic_cache.cached_ssc_tensor(
+            elec_grid, phot_grid, target_grid,
+            (ic_early_break, ic_j_break, ic_skip_empty_bins))
+            if use_lookup and ic_cache.SSC_TENSOR_ENABLED else None)
 
     def _snapshot_ic_arrays():
         """Full 2-D IC arrays for calc_photon_spectrum.
@@ -1437,14 +1442,18 @@ def evolve_pwn(
         _ssc_tgt.number[:] = ssc_seed_density(
             elec_grid, bpwn, rad_pwn, _ssc_tgt, synch_kernel)
         _ssc_tgt.update_log_number()
-        pnu_ssc = calc_sigma_and_pow_nu_ic(
-            elec_grid, phot_grid, _ssc_tgt,
-            ic_early_break=ic_early_break,
-            ic_j_break=ic_j_break,
-            ic_skip_empty_bins=ic_skip_empty_bins,
-        )
+        if _ssc_tensor is not None:
+            lin_ssc = ic_cache.ssc_power(_ssc_tensor, _ssc_tgt.number)
+        else:
+            pnu_ssc = calc_sigma_and_pow_nu_ic(
+                elec_grid, phot_grid, _ssc_tgt,
+                ic_early_break=ic_early_break,
+                ic_j_break=ic_j_break,
+                ic_skip_empty_bins=ic_skip_empty_bins,
+            )
+            lin_ssc = np.where(pnu_ssc > LOG_EMPTY_CUT, 10.0 ** pnu_ssc, 0.0)
         lin = (np.where(pow_nu_ic > LOG_EMPTY_CUT, 10.0 ** pow_nu_ic, 0.0)
-               + np.where(pnu_ssc > LOG_EMPTY_CUT, 10.0 ** pnu_ssc, 0.0))
+               + lin_ssc)
         pnu_tot = np.where(
             lin > 0.0, np.log10(np.maximum(lin, 1e-300)), LOG_EMPTY)
         pie_tot = calc_pow_ic(phot_grid, pnu_tot)

@@ -16,6 +16,8 @@ from .radiation import (
 
 T_NODE_DEX = 0.02        # node spacing
 MAX_FIELD_NODES = 128    # LRU cap
+SSC_TENSOR_SCALE = 1e40  # keeps the float32 tensor in range
+SSC_TENSOR_ENABLED = True
 
 
 def grid_key(grid: SpectralGrid) -> tuple:
@@ -140,7 +142,42 @@ def external_field_kernel(cmb_kernel: np.ndarray, elec, phot, target,
     return log_sum(ks)
 
 
+# --- SSC emission tensor ------------------------------------------------
+
+_SSC: dict = {}
+
+
+def cached_ssc_tensor(elec, phot, target, flags) -> np.ndarray:
+    """A[i, j, k]: kernel per unit seed density in target bin k (float32, scaled)."""
+    key = (grid_key(elec), grid_key(phot), grid_key(target), tuple(bool(f) for f in flags))
+    arr = _SSC.get(key)
+    if arr is None:
+        ne, np_, nt = elec.n_bins, phot.n_bins, target.n_bins
+        arr = np.zeros((ne, np_, nt), dtype=np.float32)
+        tgt = copy.deepcopy(target)
+        for k in range(1, nt - 1):
+            tgt.number[:] = 0.0
+            tgt.number[k] = 1.0
+            tgt.update_log_number()
+            logk = calc_sigma_and_pow_nu_ic(
+                elec, phot, tgt,
+                ic_early_break=flags[0], ic_j_break=flags[1],
+                ic_skip_empty_bins=flags[2])
+            arr[:, :, k] = np.where(logk > LOG_EMPTY_CUT,
+                                    10.0 ** (logk + math.log10(SSC_TENSOR_SCALE)), 0.0)
+        arr.setflags(write=False)
+        _SSC[key] = arr
+    return arr
+
+
+def ssc_power(tensor: np.ndarray, seed_number: np.ndarray) -> np.ndarray:
+    """Linear IC power (ne, np) of a seed field: A @ n."""
+    w = np.asarray(seed_number, dtype=np.float64)
+    return np.tensordot(tensor, w, axes=([2], [0])) / SSC_TENSOR_SCALE
+
+
 def clear() -> None:
     """Empty the caches."""
     _K2.clear()
     _NODES.clear()
+    _SSC.clear()

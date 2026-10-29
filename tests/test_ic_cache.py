@@ -159,3 +159,42 @@ def test_evolve_field_lookup_vs_live():
     assert _flux_weighted_diff(live, fast) < 0.05
     # the field nodes are now cached for this grid
     assert len(ic_cache._NODES) >= 2
+
+
+def test_ssc_tensor_matches_live_kernel():
+    elec, phot, tgt = _grids()
+    flags = (True, True, True)
+    A = ic_cache.cached_ssc_tensor(elec, phot, tgt, flags)
+    assert A.dtype == np.float32 and A.shape == (NE, NP, NT)
+    assert ic_cache.cached_ssc_tensor(elec, phot, tgt, flags) is A
+    # synchrotron-like seed: power law with a cutoff across the target grid
+    nu = tgt.bin_avg
+    seed = 1e-10 * (nu / 1e12) ** -1.3 * np.exp(-nu / 1e16)
+    seed[0] = seed[-1] = 0.0
+    tgt.number[:] = seed
+    tgt.update_log_number()
+    live = _lin(calc_sigma_and_pow_nu_ic(elec, phot, tgt))
+    fast = ic_cache.ssc_power(A, tgt.number)
+    m = live > 1e-12 * live.max()
+    np.testing.assert_allclose(fast[m], live[m], rtol=2e-6)
+    assert np.all(fast[~m] <= 1e-11 * live.max())
+    logf = np.where(fast > 0, np.log10(np.maximum(fast, 1e-300)), -9999.0)
+    logl = np.where(live > 0, np.log10(np.maximum(live, 1e-300)), -9999.0)
+    np.testing.assert_allclose(calc_pow_ic(phot, logf), calc_pow_ic(phot, logl), rtol=1e-6)
+
+
+@pytest.mark.skipif(_load_cmb_lookup() is None, reason='no CMB lookup file')
+def test_evolve_ssc_tensor_vs_live_path():
+    """Same fixed grid, SSC on: tensor path == live kernel path."""
+    kw = dict(_CRAB_LIKE, n_ic=0, ic_temps=[], ic_norms=[], ssc_model='uniform',
+              timestep_cooling='total_loss10', use_cmb_lookup=True)
+    ic_cache.SSC_TENSOR_ENABLED = False
+    try:
+        live = evolve_pwn(**kw)
+    finally:
+        ic_cache.SSC_TENSOR_ENABLED = True
+    fast = evolve_pwn(**kw)
+    f1, f2 = _power(live.photon_spectrum), _power(fast.photon_spectrum)
+    m = f1 > 1e-12 * f1.max()
+    np.testing.assert_allclose(f2[m], f1[m], rtol=1e-5)
+    assert fast.dyninfo[-1].bpwn == live.dyninfo[-1].bpwn   # cooling path untouched
