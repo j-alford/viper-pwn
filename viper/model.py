@@ -120,6 +120,8 @@ class PWNModel:
         self.target_freq_max: float = C.TARGET_FREQ_MAX
         # CMB IC lookup; falls through to live IC when incompatible.
         self.use_cmb_lookup: bool = False
+        # extra fields from the kernel cache
+        self.use_field_lookup: bool = False
         # Fit spec captures via getattr.
         self.escape_model: str = 'off'
         # Non-default injection forms reuse e_break/p1/p2.
@@ -499,6 +501,7 @@ class PWNModel:
 
         # Runner default True; constructor default False.
         self.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
+        self.use_field_lookup = bool(run_cfg.get('use_field_lookup', False))
 
     def apply_frozen_params(self, frozen_params: dict) -> None:
         """Freeze parameters at config-supplied values (INTERNAL units).
@@ -620,6 +623,7 @@ class PWNModel:
             ic_j_break=ic_j_break,
             ic_skip_empty_bins=ic_skip_empty_bins,
             use_cmb_lookup=self.use_cmb_lookup,
+            use_field_lookup=self.use_field_lookup,
             escape_model=self.escape_model,
             esc_norm=p['esc_norm'].value,
             esc_index=p['esc_index'].value,

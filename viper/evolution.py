@@ -48,6 +48,7 @@ from .radiation import (
     _LOG_SYNCH_FREQ_OFFSET,
     _LOG_CSYNCH_VAL,
 )
+from . import ic_cache
 from .snr import (
     calc_vt,
     calc_a,
@@ -710,14 +711,15 @@ def _load_cmb_lookup():
 
 
 def _cmb_lookup_compatible(use_cmb_lookup, cpp_compat, n_ic, f_max,
-                            n_elec_bins, n_phot_bins, n_ic_target):
+                            n_elec_bins, n_phot_bins, n_ic_target,
+                            use_field_lookup=False):
     """Return (compatible: bool, reason: str) for lookup activation."""
     if not use_cmb_lookup:
         return False, "use_cmb_lookup=False"
     if cpp_compat:
         return False, "cpp_compat=True forbids lookup"
-    if n_ic != 0:
-        return False, f"n_ic={n_ic} (lookup is CMB-only)"
+    if n_ic != 0 and not use_field_lookup:
+        return False, f"n_ic={n_ic} (lookup is CMB-only; set use_field_lookup)"
     if f_max == 1:
         return False, "f_max==1 (Maxwellian-only)"
     if n_elec_bins != C.ELEC_GRID_FIXED_NBINS:
@@ -1095,6 +1097,7 @@ def evolve_pwn(
     ic_j_break: Optional[bool] = None,
     ic_skip_empty_bins: bool = True,
     use_cmb_lookup: bool = False,
+    use_field_lookup: bool = False,
     replay_dt_sequence: Optional[Sequence[float]] = None,
     timestep_events: bool = False,
     event_dt_floor_yr: float = 0.5,
@@ -1172,6 +1175,8 @@ def evolve_pwn(
         Use the precomputed CMB IC table when compatible (CMB-only,
         default grids, not cpp_compat, lookup file present); otherwise
         falls through to live IC, reason logged at INFO.
+    use_field_lookup : bool, default False
+        Extra fields from the kernel cache (needs ``use_cmb_lookup``).
     replay_dt_sequence : sequence of float, optional
         Replay these dt values verbatim instead of calling
         :func:`calc_timestep`; falls back to live calls once
@@ -1315,6 +1320,7 @@ def evolve_pwn(
     use_lookup, _lookup_reason = _cmb_lookup_compatible(
         use_cmb_lookup, cpp_compat, n_ic, f_max,
         n_elec_bins, n_phot_bins, n_ic_target,
+        use_field_lookup=use_field_lookup,
     )
     if use_cmb_lookup and not use_lookup:
         logger.info("CMB lookup requested but skipped: %s", _lookup_reason)
@@ -1386,7 +1392,13 @@ def evolve_pwn(
             f"lookup pow_nu_ic shape {_arr.shape} != expected ({ne}, {np_}); "
             f"regenerate via tools/build_cmb_lookup.py --force"
         )
-        pow_nu_ic = _arr
+        if n_ic > 0:
+            logger.info("IC kernel: CMB lookup + %d field kernel(s)", n_ic)
+            pow_nu_ic = ic_cache.external_field_kernel(
+                _arr, elec_grid, phot_grid, target_grid, ic_temps, ic_norms,
+                ic_early_break, ic_j_break, ic_skip_empty_bins)
+        else:
+            pow_nu_ic = _arr
     else:
         logger.info("Computing IC cross-section + power tables (fused)...")
         pow_nu_ic = calc_sigma_and_pow_nu_ic(
@@ -1409,7 +1421,7 @@ def evolve_pwn(
     if _ssc_on:
         logger.info("SSC on (ssc_model=%r): building K2 cooling matrix",
                     ssc_model)
-        _k2_ssc = ic_cooling_matrix(elec_grid, phot_grid, target_grid)
+        _k2_ssc = ic_cache.cached_k2(elec_grid, phot_grid, target_grid)
         _tgt_dnu = target_grid.bin_width.copy()
         _ssc_tgt = make_log_grid(target_freq_min, target_freq_max, nt)
 

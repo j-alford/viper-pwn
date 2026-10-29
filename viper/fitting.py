@@ -98,6 +98,7 @@ class _FitSpec:
     # Evolution settings
     integration: str = 'pc_full'
     use_cmb_lookup: bool = False
+    use_field_lookup: bool = False
     # Stepping options
     timestep_events: bool = False
     snapshot_mode: str = 'secant'
@@ -185,6 +186,7 @@ def _build_fit_spec(model, observables: list[Observable],
         observables=list(observables),
         integration=integration,
         use_cmb_lookup=getattr(model, 'use_cmb_lookup', False),
+        use_field_lookup=bool(getattr(model, 'use_field_lookup', False)),
         timestep_events=bool(getattr(model, 'timestep_events', False)),
         snapshot_mode=getattr(model, 'snapshot_mode', 'secant'),
         event_dt_floor_yr=float(getattr(model, 'event_dt_floor_yr', 0.5)),
@@ -261,6 +263,7 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         dyn_step=-1,
         integration=spec.integration,
         use_cmb_lookup=spec.use_cmb_lookup,
+        use_field_lookup=spec.use_field_lookup,
         timestep_events=spec.timestep_events,
         snapshot_mode=spec.snapshot_mode,
         event_dt_floor_yr=spec.event_dt_floor_yr,

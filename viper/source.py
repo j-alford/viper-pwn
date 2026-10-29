@@ -56,6 +56,7 @@ OPTION_DEFAULTS = {
     'integration': 'pc_full',
     'constants': None,
     'use_cmb_lookup': True,
+    'use_field_lookup': False,
     'timestep_events': False,
     'snapshot_mode': 'secant',
     'event_dt_floor_yr': 0.5,
