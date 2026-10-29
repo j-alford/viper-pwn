@@ -1421,7 +1421,9 @@ def evolve_pwn(
     if _ssc_on:
         logger.info("SSC on (ssc_model=%r): building K2 cooling matrix",
                     ssc_model)
-        _k2_ssc = ic_cache.cached_k2(elec_grid, phot_grid, target_grid)
+        _k2_ssc = (ic_cache.cached_k2(elec_grid, phot_grid, target_grid)
+                   if use_lookup else
+                   ic_cooling_matrix(elec_grid, phot_grid, target_grid))
         _tgt_dnu = target_grid.bin_width.copy()
         _ssc_tgt = make_log_grid(target_freq_min, target_freq_max, nt)
         # emission tensor only where the grid is fixed (cache can hit)
