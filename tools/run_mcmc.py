@@ -193,9 +193,28 @@ def main():
     else:
         p0_center = default_p0
 
+    init_walkers = fit['init_walkers']
+    if init_walkers:
+        # Explicit starting positions, one row per walker, in fit space
+        # (log10 for log-sampled parameters) and in the free-parameter
+        # order of the source file.  Replaces the centre + scatter ball,
+        # e.g. to start along a known degeneracy.
+        if not os.path.exists(init_walkers):
+            print(f"init_walkers file not found: {init_walkers}")
+            return 2
+        p0 = np.array(np.load(init_walkers), dtype=float)
+        if p0.shape != (nwalkers, spec.ndim):
+            print(f"init_walkers has shape {p0.shape}; the fit needs "
+                  f"({nwalkers}, {spec.ndim}) = (FIT['nwalkers'], free "
+                  f"parameters). Fix the file or FIT['nwalkers'].")
+            return 2
+        p0_center = np.median(p0, axis=0)
+
     lp0 = log_probability(p0_center, spec)
     lpr0 = log_prior(p0_center, spec) if np.isfinite(lp0) else 0.0
     line = f"Starting point chi2 = {-2*(lp0 - lpr0):.2f}"
+    if init_walkers:
+        line = "Walker median " + line[0].lower() + line[1:]
     if lpr0 != 0.0:
         line += f" (+ prior dchi2 = {-2*lpr0:.2f})"
     print(line)
@@ -205,7 +224,8 @@ def main():
     print(f"seed = {seed} (walker scatter + emcee proposals)")
     rng = np.random.default_rng(seed)
     scales = np.maximum(np.abs(p0_center) * scatter, 1e-3)
-    p0 = p0_center + scales * rng.standard_normal((nwalkers, spec.ndim))
+    if not init_walkers:
+        p0 = p0_center + scales * rng.standard_normal((nwalkers, spec.ndim))
     for i, fp in enumerate(spec.free_params):
         lo, hi = fp.bounds
         p0[:, i] = np.clip(p0[:, i], lo + 1e-10, hi - 1e-10)

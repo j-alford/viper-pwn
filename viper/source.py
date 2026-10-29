@@ -72,6 +72,7 @@ FIT_DEFAULTS = {
     'scatter': 5e-3,
     'seed': 42,
     'init_from': None,
+    'init_walkers': None,
 }
 
 NESTED_DEFAULTS = {
