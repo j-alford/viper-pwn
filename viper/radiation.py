@@ -78,6 +78,74 @@ def calc_fx_array(x: np.ndarray) -> np.ndarray:
     return result
 
 
+# --- Synchrotron G(x) table ---
+
+def _build_gx_table(n_points: int = 2000):
+    """G(x): pitch-angle-averaged synchrotron function (AKP 2010 Eq. D5)."""
+    x_vals = np.logspace(-6, np.log10(C.max_synch_x), n_points)
+    k13 = bessel_kv(1.0 / 3.0, 0.5 * x_vals)
+    k23 = bessel_kv(2.0 / 3.0, 0.5 * x_vals)
+    g_vals = x_vals / 20.0 * ((8.0 + 3.0 * x_vals ** 2) * k13 ** 2
+                              + x_vals * k23 * (2.0 * k13 - 3.0 * x_vals * k23))
+    return np.log10(x_vals), g_vals
+
+
+_GX_TABLE_X = None
+_GX_TABLE_Y = None
+
+
+def _get_gx_table():
+    """(log_x, G(x)) lookup arrays."""
+    global _GX_TABLE_X, _GX_TABLE_Y
+    if _GX_TABLE_X is None:
+        _GX_TABLE_X, _GX_TABLE_Y = _build_gx_table()
+    return _GX_TABLE_X, _GX_TABLE_Y
+
+
+def synch_table_array(x: np.ndarray, table_x: np.ndarray,
+                      table_y: np.ndarray) -> np.ndarray:
+    """Vectorized F or G lookup."""
+    result = np.zeros_like(x)
+    mask = (x > 0) & (x <= C.max_synch_x)
+    if np.any(mask):
+        result[mask] = np.interp(np.log10(x[mask]), table_x, table_y)
+    return result
+
+
+# --- Synchrotron emission kernels ---
+
+# p_nu = 10**(log_amp + log B) * T(nu/nu_c); nu_c at sin(alpha) = 1
+_LOG_NU_CRIT0 = (C.log_3 + C.log_e_charge - np.log10(4.0 * np.pi)
+                 - 3.0 * C.log_m_electron - 5.0 * C.log_c)
+_LOG_SYNCH_AMP0 = (0.5 * C.log_3 + 3.0 * C.log_e_charge
+                   - C.log_m_electron - 2.0 * C.log_c)
+_LOG_RMS_SINA = 0.5 * np.log10(2.0 / 3.0)
+
+# name -> (log amplitude factor, log nu_c factor, table)
+SYNCH_KERNELS = {
+    'isotropic': (0.0, 0.0, 'G'),
+    'rms_pitch': (_LOG_RMS_SINA, _LOG_RMS_SINA, 'F'),
+    'legacy': (2.0 * _LOG_RMS_SINA, _LOG_RMS_SINA, 'F'),   # radiates sqrt(2/3)
+}
+DEFAULT_SYNCH_KERNEL = 'isotropic'
+
+
+def get_synch_kernel(name: str):
+    """(log_amp, log_nu_crit, table_x, table_y) for a kernel name."""
+    try:
+        log_a, log_s, table = SYNCH_KERNELS[name]
+    except KeyError:
+        raise ValueError(
+            f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
+            f"got {name!r}") from None
+    table_x, table_y = _get_fx_table() if table == 'F' else _get_gx_table()
+    return _LOG_SYNCH_AMP0 + log_a, _LOG_NU_CRIT0 + log_s, table_x, table_y
+
+
+def _log10_or_neginf(value: float) -> float:
+    return np.log10(value) if value > 0 else -np.inf
+
+
 # --- Synchrotron helpers ---
 
 def calc_synch_freq(log_energy: float, bpwn: float) -> float:
@@ -505,13 +573,9 @@ def _calc_sigma_and_pow_nu_ic_numpy(
 # 2.24 uniform-sphere factor (Atoyan & Aharonian 1996; Martin et al. 2012).
 SSC_GEOM_FACTOR = 2.24
 
-# true critical frequency: 0.29 peak factor removed
+# legacy-kernel constants
 _LOG_NU_CRIT_OFFSET = _LOG_SYNCH_FREQ_OFFSET - np.log10(0.29)
-
-# p_ν = 10**(_LOG_SYNCH_CONST_B0 + log10(B)) · F(ν/ν_crit) [erg/s/Hz]
-_LOG_SYNCH_CONST_B0 = (np.log10(2.0 / 3.0 * 3.0 ** 0.5)
-                       + 3.0 * C.log_e_charge
-                       - C.log_m_electron - 2.0 * C.log_c)
+_LOG_SYNCH_CONST_B0 = _LOG_SYNCH_AMP0 + 2.0 * _LOG_RMS_SINA
 
 
 @njit(cache=True, parallel=True)
@@ -713,20 +777,23 @@ def _synch_seed_lum(elec_log_avg, elec_number, log_bpwn, target_log_avg,
 
 def _synch_seed_lum_numpy(elec_log_avg, elec_number, log_bpwn,
                           target_log_avg, log_nu_crit_offset,
-                          log_erg) -> np.ndarray:
-    """NumPy fallback: same sum via calc_fx_array on a 2-D x matrix."""
+                          log_erg, table_x=None, table_y=None) -> np.ndarray:
+    """NumPy fallback: same sum via table lookup on a 2-D x matrix."""
     occ = elec_number > 0
     if not np.any(occ):
         return np.zeros(len(target_log_avg))
+    if table_x is None:
+        table_x, table_y = _get_fx_table()
     log_nu_c = (log_nu_crit_offset + log_bpwn
                 + 2.0 * (elec_log_avg[occ] - log_erg))
     x = 10.0 ** (target_log_avg[np.newaxis, :] - log_nu_c[:, np.newaxis])
-    fx = calc_fx_array(x)
+    fx = synch_table_array(x, table_x, table_y)
     return elec_number[occ] @ fx
 
 
 def synch_seed_lum(elec_grid: SpectralGrid, bpwn: float,
-                   target_grid: SpectralGrid) -> np.ndarray:
+                   target_grid: SpectralGrid,
+                   synch_kernel: str = DEFAULT_SYNCH_KERNEL) -> np.ndarray:
     """Instantaneous synchrotron L_ν at the target bins [10^40 erg/s/Hz].
 
     L_ν(ν_k) = Σ_i N_i · p_synch(E_i, ν_k); units follow
@@ -736,33 +803,35 @@ def synch_seed_lum(elec_grid: SpectralGrid, bpwn: float,
     if bpwn <= 0:
         return np.zeros(nt)
     log_bpwn = np.log10(bpwn)
+    log_amp, log_nu_crit, table_x, table_y = get_synch_kernel(synch_kernel)
     if HAS_NUMBA:
-        table_x, table_y = _get_fx_table()
         n_table = len(table_x)
         raw = _synch_seed_lum(
             elec_grid.log_avg, elec_grid.number, log_bpwn,
             target_grid.log_avg, elec_grid.n_bins, nt,
-            _LOG_NU_CRIT_OFFSET, C.log_erg,
+            log_nu_crit, C.log_erg,
             table_x[0], (table_x[-1] - table_x[0]) / (n_table - 1),
             n_table, table_y, table_x[-1],
         )
     else:
         raw = _synch_seed_lum_numpy(
             elec_grid.log_avg, elec_grid.number, log_bpwn,
-            target_grid.log_avg, _LOG_NU_CRIT_OFFSET, C.log_erg,
+            target_grid.log_avg, log_nu_crit, C.log_erg,
+            table_x, table_y,
         )
-    return 10.0 ** (_LOG_SYNCH_CONST_B0 + log_bpwn) * raw
+    return 10.0 ** (log_amp + log_bpwn) * raw
 
 
 def ssc_seed_density(elec_grid: SpectralGrid, bpwn: float, rad_pwn: float,
-                     target_grid: SpectralGrid) -> np.ndarray:
+                     target_grid: SpectralGrid,
+                     synch_kernel: str = DEFAULT_SYNCH_KERNEL) -> np.ndarray:
     """SSC seed photon number density n_ν [cm^-3 Hz^-1] at the target bins.
 
     One-zone uniform-sphere mean density (Atoyan & Aharonian 1996):
     ``n_ν = SSC_GEOM_FACTOR · L_ν / (4π R² c · hν)``; ``bpwn`` [G],
     ``rad_pwn`` [cm].
     """
-    l_nu_40 = synch_seed_lum(elec_grid, bpwn, target_grid)
+    l_nu_40 = synch_seed_lum(elec_grid, bpwn, target_grid, synch_kernel)
     if rad_pwn <= 0:
         return np.zeros_like(l_nu_40)
     u_nu = (SSC_GEOM_FACTOR * l_nu_40 * 1.0e40
@@ -819,27 +888,29 @@ def new_energy_calc(energy, log_c_rad, log_rad, log_old_rad,
 # --- Photon spectrum calculation ---
 
 def _calc_photon_spectrum_instantaneous(elec_grid, phot_grid, bpwn,
-                                        min_ic_bin, pow_nu_ic, pow_ic_elec):
+                                        min_ic_bin, pow_nu_ic, pow_ic_elec,
+                                        synch_kernel=DEFAULT_SYNCH_KERNEL):
     """Snapshot emission: every electron bin emits at its instantaneous
     theoretical rate (the titer→0 limit of the secant formula).
     Modifies phot_grid."""
     n_elec = elec_grid.n_bins
 
-    log_synch_const = (np.log10(2.0 / 3.0 * 3.0 ** 0.5)
-                       + 3.0 * C.log_e_charge + np.log10(bpwn)
-                       - C.log_m_electron - 2.0 * C.log_c)
+    log_amp, log_nu_crit, table_x, table_y = get_synch_kernel(synch_kernel)
+    log_synch_const = log_amp + _log10_or_neginf(bpwn)
+    log_nu_crit_b = log_nu_crit + _log10_or_neginf(bpwn)
 
     for i in range(n_elec):
         if elec_grid.number[i] <= 0:
             continue
 
         # Synchrotron
-        nu_crit = calc_synch_freq(elec_grid.log_avg[i], bpwn) / 0.29
+        nu_crit = 10.0 ** (log_nu_crit_b
+                               + 2.0 * (elec_grid.log_avg[i] - C.log_erg))
         max_synch_freq = nu_crit * C.max_synch_x
         max_bin = _calc_bin(max_synch_freq, phot_grid)
         if max_bin >= 0:
             x_vals = phot_grid.bin_avg[:max_bin + 1] / nu_crit
-            fx_vals = calc_fx_array(x_vals)
+            fx_vals = synch_table_array(x_vals, table_x, table_y)
             valid = fx_vals > 0
             if np.any(valid):
                 log_power = (log_synch_const + np.log10(fx_vals[valid])
@@ -864,7 +935,8 @@ def _calc_photon_spectrum_instantaneous(elec_grid, phot_grid, bpwn,
 
 def calc_photon_spectrum(elec_grid, phot_grid, bpwn, old_radius, new_radius,
                          velocity, min_ic_bin, pow_nu_ic, pow_ic_elec, titer,
-                         snapshot_mode='secant'):
+                         snapshot_mode='secant',
+                         synch_kernel=DEFAULT_SYNCH_KERNEL):
     """Compute broadband photon spectrum (synchrotron + IC). Modifies phot_grid.
 
     snapshot_mode:
@@ -880,7 +952,8 @@ def calc_photon_spectrum(elec_grid, phot_grid, bpwn, old_radius, new_radius,
             f"got {snapshot_mode!r}")
     if snapshot_mode == 'instantaneous':
         _calc_photon_spectrum_instantaneous(
-            elec_grid, phot_grid, bpwn, min_ic_bin, pow_nu_ic, pow_ic_elec)
+            elec_grid, phot_grid, bpwn, min_ic_bin, pow_nu_ic, pow_ic_elec,
+            synch_kernel)
         return
 
     n_elec = elec_grid.n_bins
@@ -891,9 +964,9 @@ def calc_photon_spectrum(elec_grid, phot_grid, bpwn, old_radius, new_radius,
     ln_rad_rat = np.log(new_radius / old_radius)
     rad_rat = old_radius / new_radius
 
-    log_synch_const = (np.log10(2.0 / 3.0 * 3.0 ** 0.5)
-                       + 3.0 * C.log_e_charge + np.log10(bpwn)
-                       - C.log_m_electron - 2.0 * C.log_c)
+    log_amp, log_nu_crit, table_x, table_y = get_synch_kernel(synch_kernel)
+    log_synch_const = log_amp + _log10_or_neginf(bpwn)
+    log_nu_crit_b = log_nu_crit + _log10_or_neginf(bpwn)
 
     vel_neg = velocity < 0
     log_vel = np.log10(abs(velocity)) if velocity != 0 else -999999.0
@@ -943,14 +1016,15 @@ def calc_photon_spectrum(elec_grid, phot_grid, bpwn, old_radius, new_radius,
                              + 2.0 * (elec_grid.log_avg[i] - C.log_erg))
             log_sp_frac = min(log_sp_act - log_sp_theory, 0.0)
 
-            nu_crit = calc_synch_freq(elec_grid.log_avg[i], bpwn) / 0.29
+            nu_crit = 10.0 ** (log_nu_crit_b
+                               + 2.0 * (elec_grid.log_avg[i] - C.log_erg))
             max_synch_freq = nu_crit * C.max_synch_x
 
             max_bin = _calc_bin(max_synch_freq, phot_grid)
 
             if max_bin >= 0:
                 x_vals = phot_grid.bin_avg[:max_bin + 1] / nu_crit
-                fx_vals = calc_fx_array(x_vals)
+                fx_vals = synch_table_array(x_vals, table_x, table_y)
                 valid = fx_vals > 0
                 if np.any(valid):
                     log_power = (log_synch_const + np.log10(fx_vals[valid])

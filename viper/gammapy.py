@@ -46,6 +46,7 @@ def _run_and_convert(
     ic_temp_2=0.0, ic_norm_2=0.0,
     injection_model='broken_powerlaw',
     ssc_model='off',
+    synch_kernel='isotropic',
 ):
     """Run the PWN model and return (log10_energy_TeV, log10_dnde) arrays.
 
@@ -69,6 +70,7 @@ def _run_and_convert(
     model.distance._set_internal(distance_pc)
     model.injection_model = injection_model
     model.ssc_model = ssc_model
+    model.synch_kernel = synch_kernel
 
     if ic_temp_1 > 0 and ic_norm_1 > 0:
         model.add_ic_field(temp=ic_temp_1, norm=ic_norm_1)
@@ -170,6 +172,8 @@ if _HAS_GAMMAPY:
         ssc_model : str
             Synchrotron self-Compton seed, ``'off'`` (default) or
             ``'uniform'``.
+        synch_kernel : str
+            Synchrotron emission kernel; default ``'isotropic'``.
         esn : float
             Supernova kinetic energy [10^51 erg].
         mej : float
@@ -256,11 +260,12 @@ if _HAS_GAMMAPY:
 
         def __init__(self, period=0.1, p_dot=1e-13,
                      injection_model='broken_powerlaw',
-                     ssc_model='off', **kwargs):
+                     ssc_model='off', synch_kernel='isotropic', **kwargs):
             self.period = period
             self.p_dot = p_dot
             self.injection_model = injection_model
             self.ssc_model = ssc_model
+            self.synch_kernel = synch_kernel
             self._cache_hash = None
             self._cache_log_e = None
             self._cache_log_f = None
@@ -319,7 +324,7 @@ if _HAS_GAMMAPY:
                    t('ic_temp_1', ic_temp_1), t('ic_norm_1', ic_norm_1),
                    t('ic_temp_2', ic_temp_2), t('ic_norm_2', ic_norm_2),
                    self.period, self.p_dot, self.injection_model,
-                   self.ssc_model)
+                   self.ssc_model, self.synch_kernel)
             return hashlib.md5(str(key).encode()).hexdigest()
 
         def evaluate(self, energy, esn, mej, n_ism, distance,
@@ -379,6 +384,7 @@ float or `~astropy.units.Quantity`
                     ic_norm_2=t('ic_norm_2', ic_norm_2),
                     injection_model=self.injection_model,
                     ssc_model=self.ssc_model,
+                    synch_kernel=self.synch_kernel,
                 )
                 self._cache_hash = h
                 self._cache_log_e = log_e
@@ -391,7 +397,8 @@ float or `~astropy.units.Quantity`
         # Serialization: the default path drops non-Parameter attributes.
         # ------------------------------------------------------------------
 
-        _EXTRA_ATTRS = ("period", "p_dot", "injection_model", "ssc_model")
+        _EXTRA_ATTRS = ("period", "p_dot", "injection_model", "ssc_model",
+                        "synch_kernel")
 
         def to_dict(self, full_output=False):
             """Serialize, including the non-Parameter physics attributes."""

@@ -17,6 +17,7 @@ import numpy as np
 
 from .snr import calc_trad
 from .evolution import evolve_pwn, PWNModelResult
+from .radiation import DEFAULT_SYNCH_KERNEL
 from .observables import Observable, extract_all
 from .pulsar import true_age_yr, tau_sd_from_age_yr, e0_37_from_timing
 from . import constants as C
@@ -109,6 +110,8 @@ class _FitSpec:
     injection_model: str = 'broken_powerlaw'
     # SSC toggle; no new params
     ssc_model: str = 'off'
+    # synchrotron emission kernel
+    synch_kernel: str = DEFAULT_SYNCH_KERNEL
     known_age: float | None = None
     age_bounds: tuple[float, float] | None = None
 
@@ -191,6 +194,7 @@ def _build_fit_spec(model, observables: list[Observable],
         injection_model=getattr(model, 'injection_model',
                                 'broken_powerlaw'),
         ssc_model=getattr(model, 'ssc_model', 'off'),
+        synch_kernel=getattr(model, 'synch_kernel', DEFAULT_SYNCH_KERNEL),
         known_age=known_age,
         age_bounds=getattr(model, 'age_bounds', None),
     )
@@ -267,6 +271,7 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         esc_index=vals.get('esc_index', 0.0),
         injection_model=spec.injection_model,
         ssc_model=spec.ssc_model,
+        synch_kernel=spec.synch_kernel,
     )
 
 

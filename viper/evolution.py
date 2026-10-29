@@ -40,6 +40,8 @@ from .radiation import (
     new_energy_calc,
     new_energy_calc_vec,
     ssc_seed_density,
+    DEFAULT_SYNCH_KERNEL,
+    SYNCH_KERNELS,
     _LOG_TAU_CONST,
     _LOG_8PI,
     _LOG_1P1,
@@ -1105,6 +1107,7 @@ def evolve_pwn(
     injection_model: str = 'broken_powerlaw',
     ssc_model: str = 'off',
     snapshot_injection: str = 'included',
+    synch_kernel: str = DEFAULT_SYNCH_KERNEL,
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1231,6 +1234,9 @@ def evolve_pwn(
         kernel call). The 'compat' timestep bound is blind to SSC
         cooling; use 'total_loss10' with SSC on. Forced 'off' under
         cpp_compat.
+    synch_kernel : str
+        Synchrotron emission kernel: 'isotropic' (default), 'rms_pitch'
+        or 'legacy' (forced under cpp_compat). Emission only, not cooling.
     """
     if cpp_compat:
         integration = 'euler'
@@ -1242,6 +1248,7 @@ def evolve_pwn(
         escape_model = 'off'
         injection_model = 'broken_powerlaw'
         ssc_model = 'off'
+        synch_kernel = 'legacy'
         if C.CONSTANTS_SOURCE != 'gsz2009':
             logger.warning(
                 "cpp_compat=True but constants are '%s', not 'gsz2009'. "
@@ -1287,6 +1294,11 @@ def evolve_pwn(
         raise ValueError(
             f"snapshot_injection must be 'included' or 'excluded', "
             f"got {snapshot_injection!r}"
+        )
+    if synch_kernel not in SYNCH_KERNELS:
+        raise ValueError(
+            f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
+            f"got {synch_kernel!r}"
         )
     if ssc_model != 'off' and timestep_cooling == 'compat':
         logger.warning(
@@ -1411,7 +1423,7 @@ def evolve_pwn(
         if not _ssc_on:
             return pow_nu_ic, pow_ic_elec, min_ic_bin
         _ssc_tgt.number[:] = ssc_seed_density(
-            elec_grid, bpwn, rad_pwn, _ssc_tgt)
+            elec_grid, bpwn, rad_pwn, _ssc_tgt, synch_kernel)
         _ssc_tgt.update_log_number()
         pnu_ssc = calc_sigma_and_pow_nu_ic(
             elec_grid, phot_grid, _ssc_tgt,
@@ -1553,7 +1565,8 @@ def evolve_pwn(
 
         # SSC seed lagged one step
         if _ssc_on:
-            _n_ssc = ssc_seed_density(elec_grid, bpwn, rad_pwn, _ssc_tgt)
+            _n_ssc = ssc_seed_density(elec_grid, bpwn, rad_pwn, _ssc_tgt,
+                                      synch_kernel)
             pow_ic_elec_step = pow_ic_elec + _k2_ssc @ (_n_ssc * _tgt_dnu)
             _nz = np.nonzero(pow_ic_elec_step > 0)[0]
             min_ic_bin_step = int(_nz[0]) if _nz.size else 0
@@ -1792,6 +1805,7 @@ def evolve_pwn(
                 _snap, phot_grid, bpwn, orad, rad_pwn,
                 vel_pwn, _mib_snap, _pnu_snap, _pie_snap, titer,
                 snapshot_mode=snapshot_mode,
+                synch_kernel=synch_kernel,
             )
             result.radinfo.append((time, phot_grid.number.copy()))
 
@@ -1820,6 +1834,7 @@ def evolve_pwn(
         _snap, phot_grid, bpwn, orad, rad_pwn,
         vel_pwn, _mib_snap, _pnu_snap, _pie_snap, titer,
         snapshot_mode=snapshot_mode,
+        synch_kernel=synch_kernel,
     )
 
     result.elec_grid = elec_grid

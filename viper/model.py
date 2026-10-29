@@ -15,6 +15,7 @@ import numpy as np
 
 from .parameter import Parameter, ParameterSet
 from .evolution import evolve_pwn, PWNModelResult
+from .radiation import DEFAULT_SYNCH_KERNEL, SYNCH_KERNELS
 from .scalar_params import check_physical_inputs
 from .pulsar import true_age_yr, tau_sd_from_age_yr, e0_37_from_timing
 from . import constants as C
@@ -124,6 +125,8 @@ class PWNModel:
         # Non-default injection forms reuse e_break/p1/p2.
         self.injection_model: str = 'broken_powerlaw'
         self.ssc_model: str = 'off'
+        # synchrotron emission kernel
+        self.synch_kernel: str = DEFAULT_SYNCH_KERNEL
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
         # Allowed age range [yr] with tau_sd and the braking index both
@@ -406,6 +409,12 @@ class PWNModel:
                 f"{self.ssc_model!r}"
             )
 
+        if self.synch_kernel not in SYNCH_KERNELS:
+            problems.append(
+                f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
+                f"got {self.synch_kernel!r}"
+            )
+
         if problems:
             raise ValueError(
                 "Model validation failed:\n  - " +
@@ -482,6 +491,12 @@ class PWNModel:
                 f"ssc_model must be 'off' or 'uniform', got "
                 f"{self.ssc_model!r}")
 
+        self.synch_kernel = run_cfg.get('synch_kernel', DEFAULT_SYNCH_KERNEL)
+        if self.synch_kernel not in SYNCH_KERNELS:
+            raise ValueError(
+                f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
+                f"got {self.synch_kernel!r}")
+
         # Runner default True; constructor default False.
         self.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
 
@@ -512,7 +527,8 @@ class PWNModel:
             escape_model: str = None,
             injection_model: str = None,
             ssc_model: str = None,
-            snapshot_injection: str = 'included') -> PWNModelResult:
+            snapshot_injection: str = 'included',
+            synch_kernel: str = None) -> PWNModelResult:
         """Run the full PWN evolution model.
 
         Parameters
@@ -534,7 +550,7 @@ class PWNModel:
             ``evolve_pwn``.
         ic_skip_empty_bins : bool
             Skip empty electron bins in the IC kernel (output unchanged).
-        escape_model, injection_model, ssc_model : str, optional
+        escape_model, injection_model, ssc_model, synch_kernel : str, optional
             If given, assign the corresponding model attribute before
             running (persists on the model); ``ssc_model`` is ``'off'``
             or ``'uniform'``.
@@ -562,6 +578,9 @@ class PWNModel:
             self.validate()  # re-check name
         if ssc_model is not None:
             self.ssc_model = ssc_model
+            self.validate()
+        if synch_kernel is not None:
+            self.synch_kernel = synch_kernel
             self.validate()
         self._result = evolve_pwn(
             esn_51=p['esn'].value,
@@ -607,6 +626,7 @@ class PWNModel:
             injection_model=self.injection_model,
             ssc_model=self.ssc_model,
             snapshot_injection=snapshot_injection,
+            synch_kernel=self.synch_kernel,
             resolve_final_cooling=getattr(self, 'resolve_final_cooling', False),
         )
         return self._result

@@ -83,26 +83,40 @@ class TestCoolingMatrix:
 class TestSynchSeed:
     """Instantaneous synchrotron seed."""
 
-    def test_seed_normalization(self):
-        # emission-convention √(2/3) identity
+    @pytest.mark.parametrize('kernel, expected', [
+        ('isotropic', 1.0),
+        ('rms_pitch', 1.0),
+        ('legacy', np.sqrt(2.0 / 3.0)),
+    ])
+    def test_seed_normalization(self, kernel, expected):
+        # emitted power vs c_synch E²
         wide = make_log_grid(1.0e2, 1.0e25, 400)
-        sqrt23 = np.sqrt(2.0 / 3.0)
         for bpwn in (1.0e-5, 1.0e-4):
             for ibin in (60, 90, 120):
                 elec = make_log_grid(3.0e-5, 1.0e6, NE)
                 elec.number[ibin] = 1.0
                 elec.update_log_number()
-                l40 = R.synch_seed_lum(elec, bpwn, wide)
+                l40 = R.synch_seed_lum(elec, bpwn, wide, kernel)
                 p_table = np.sum(l40 * wide.bin_width)
                 cs = R.csynch_calc_vec(
                     elec.log_avg[ibin:ibin + 1], bpwn, 1e-30,
                     np.log10(3e18))[0]
                 e_erg = 10.0 ** (elec.log_avg[ibin] - C.log_erg)
                 ratio = p_table / (cs * e_erg ** 2)
-                assert ratio == pytest.approx(sqrt23, rel=0.01), (
-                    f"B={bpwn:.1e} G, E={elec.bin_avg[ibin]:.3g} GeV: "
-                    f"∫L_ν dν / (c_synch E²) = {ratio:.5f}, expected "
-                    f"√(2/3) = {sqrt23:.5f}")
+                assert ratio == pytest.approx(expected, rel=0.005), (
+                    f"{kernel}: B={bpwn:.1e} G, E={elec.bin_avg[ibin]:.3g} "
+                    f"GeV: ∫L_ν dν / (c_synch E²) = {ratio:.5f}, expected "
+                    f"{expected:.5f}")
+
+    def test_default_kernel_is_isotropic(self):
+        elec, _, tgt = _kernel_grids()
+        elec.number[:] = np.random.RandomState(5).lognormal(0.0, 2.0, NE)
+        elec.update_log_number()
+        a = R.synch_seed_lum(elec, 1.0e-4, tgt)
+        b = R.synch_seed_lum(elec, 1.0e-4, tgt, 'isotropic')
+        np.testing.assert_array_equal(a, b)
+        with pytest.raises(ValueError, match="synch_kernel"):
+            R.synch_seed_lum(elec, 1.0e-4, tgt, 'bogus')
 
     @pytest.mark.skipif(not R.HAS_NUMBA, reason="numba not installed")
     def test_backends_agree(self):
@@ -110,7 +124,7 @@ class TestSynchSeed:
         elec.number[:] = np.random.RandomState(7).lognormal(0.0, 2.0, NE)
         elec.update_log_number()
         bpwn = 1.0e-4
-        a = R.synch_seed_lum(elec, bpwn, tgt)
+        a = R.synch_seed_lum(elec, bpwn, tgt, 'legacy')
         b = 10.0 ** (R._LOG_SYNCH_CONST_B0 + np.log10(bpwn)) \
             * R._synch_seed_lum_numpy(
                 elec.log_avg, elec.number, np.log10(bpwn), tgt.log_avg,
@@ -308,6 +322,32 @@ class TestWiring:
             m.run(ssc_model='bogus')
         assert m.ssc_model == 'bogus'  # set before validate
         m.ssc_model = 'off'
+
+    def test_synch_kernel_wiring(self):
+        import astropy.units as u
+        from viper.fitting import _build_fit_spec, _theta_to_evolve_args
+        m = self._model()
+        assert m.synch_kernel == 'isotropic'
+        m.validate()
+        m.synch_kernel = 'bogus'
+        with pytest.raises(ValueError, match="synch_kernel"):
+            m.validate()
+        m.apply_run_config({'synch_kernel': 'rms_pitch'})
+        assert m.synch_kernel == 'rms_pitch'
+        m.apply_run_config({})
+        assert m.synch_kernel == 'isotropic'
+        with pytest.raises(ValueError, match="synch_kernel"):
+            m.apply_run_config({'synch_kernel': 'F'})
+        m.synch_kernel = 'legacy'
+        m.esn.frozen = False
+        m.esn.bounds = (1e50 * u.erg, 1e52 * u.erg)
+        spec = _build_fit_spec(m, observables=[])
+        assert spec.synch_kernel == 'legacy'
+        spec2 = pickle.loads(pickle.dumps(spec))
+        theta = np.array([np.mean(spec.free_params[0].bounds)])
+        assert _theta_to_evolve_args(theta, spec2)['synch_kernel'] == 'legacy'
+        with pytest.raises(ValueError, match="synch_kernel"):
+            m.run(synch_kernel='bogus')
 
 
 if __name__ == '__main__':

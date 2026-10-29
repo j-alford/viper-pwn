@@ -64,6 +64,7 @@ OPTION_DEFAULTS = {
     'escape_model': 'off',
     'injection_model': 'broken_powerlaw',
     'ssc_model': 'off',
+    'synch_kernel': 'isotropic',
 }
 
 FIT_DEFAULTS = {
