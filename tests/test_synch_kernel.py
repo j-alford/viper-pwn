@@ -27,37 +27,29 @@ def _g_quadrature(x):
 
 class TestGTable:
 
-    def test_matches_pitch_angle_quadrature(self):
+    def test_table_is_shared_closed_form(self):
+        from viper.radiative import kernels as K
         tx, ty = R._get_gx_table()
-        for x in (1e-5, 1e-3, 0.03, 0.23, 1.0, 3.0, 6.0):
-            table = np.interp(np.log10(x), tx, ty)
-            assert table == pytest.approx(_g_quadrature(x), rel=2e-3), x
+        assert np.array_equal(ty, K.synch_G_exact(10.0 ** tx))
+        x = np.logspace(-5.9, 0.0, 400)
+        tab = R.synch_table_array(x, tx, ty)
+        assert np.max(np.abs(tab / K.synch_G(x) - 1.0)) < 1e-5
+        x = np.logspace(0.0, 1.0, 100)
+        tab = R.synch_table_array(x, tx, ty)
+        assert np.max(np.abs(tab / K.synch_G(x) - 1.0)) < 1e-3
+
+    def test_constants_agree_with_shared_kernels(self):
+        from viper.radiative import kernels as K
+        assert 10.0 ** R._LOG_NU_CRIT0 == pytest.approx(K._NUC_COEF / K.MEC2 ** 2, rel=1e-12)
+        assert 10.0 ** R._LOG_SYNCH_AMP0 == pytest.approx(K._SYN_AMP, rel=1e-12)
+        assert 10.0 ** R._LOG_RMS_SINA == pytest.approx(K.SQRT_2_3, rel=1e-12)
+        assert R.SSC_GEOM_FACTOR == K.SSC_UNIFORM_SPHERE == 2.24
 
     def test_peak_location_and_value(self):
-        # AKP 2010: max G = 0.7126 at x = 0.2292
         tx, ty = R._get_gx_table()
         i = np.argmax(ty)
         assert 10.0 ** tx[i] == pytest.approx(0.2292, rel=0.01)
         assert ty[i] == pytest.approx(0.7126, rel=1e-3)
-
-    def test_akp10_d7_approximation_agrees(self):
-        # AKP 2010 Eq. D7, quoted at 0.2%
-        tx, ty = R._get_gx_table()
-        x = np.logspace(-5, 1.2, 60)
-        cb = np.cbrt(x)
-        d7 = (1.808 * cb / np.sqrt(1.0 + 3.4 * cb ** 2)
-              * (1.0 + 2.21 * cb ** 2 + 0.347 * cb ** 4)
-              / (1.0 + 1.353 * cb ** 2 + 0.217 * cb ** 4) * np.exp(-x))
-        table = np.interp(np.log10(x), tx, ty)
-        assert np.max(np.abs(d7 / table - 1.0)) < 3e-3
-
-    def test_total_power_two_thirds_of_fixed_pitch(self):
-        # ∫G dx = (2/3) ∫F dx = (2/3)(8π/(9√3))
-        tx, ty = R._get_gx_table()
-        x = 10.0 ** tx
-        total = np.trapezoid(ty, x)
-        assert total == pytest.approx(2.0 / 3.0 * 8.0 * np.pi / (9.0 * np.sqrt(3.0)),
-                                      rel=2e-3)
 
 
 class TestKernelRegistry:

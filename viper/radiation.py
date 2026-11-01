@@ -81,13 +81,10 @@ def calc_fx_array(x: np.ndarray) -> np.ndarray:
 # --- Synchrotron G(x) table ---
 
 def _build_gx_table(n_points: int = 2000):
-    """G(x): pitch-angle-averaged synchrotron function (AKP 2010 Eq. D5)."""
+    """G(x) table, shared closed form."""
+    from .radiative.kernels import synch_G_exact
     x_vals = np.logspace(-6, np.log10(C.max_synch_x), n_points)
-    k13 = bessel_kv(1.0 / 3.0, 0.5 * x_vals)
-    k23 = bessel_kv(2.0 / 3.0, 0.5 * x_vals)
-    g_vals = x_vals / 20.0 * ((8.0 + 3.0 * x_vals ** 2) * k13 ** 2
-                              + x_vals * k23 * (2.0 * k13 - 3.0 * x_vals * k23))
-    return np.log10(x_vals), g_vals
+    return np.log10(x_vals), synch_G_exact(x_vals)
 
 
 _GX_TABLE_X = None
@@ -571,7 +568,7 @@ def _calc_sigma_and_pow_nu_ic_numpy(
 # --- Synchrotron self-Compton (SSC) ---
 
 # 2.24 uniform-sphere factor (Atoyan & Aharonian 1996; Martin et al. 2012).
-SSC_GEOM_FACTOR = 2.24
+from .radiative.kernels import SSC_UNIFORM_SPHERE as SSC_GEOM_FACTOR
 
 # legacy-kernel constants
 _LOG_NU_CRIT_OFFSET = _LOG_SYNCH_FREQ_OFFSET - np.log10(0.29)
