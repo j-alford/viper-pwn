@@ -86,6 +86,7 @@ def _to_hz(value: float, unit: str) -> float:
 class ObsType(Enum):
     ANGULAR_SIZE_SNR = 'angular_size_snr'
     ANGULAR_SIZE_PWN = 'angular_size_pwn'
+    EXPANSION_AGE_PWN = 'expansion_age_pwn'
     FLUX_DENSITY = 'flux_density'
     BAND_FLUX = 'band_flux'
     SPECTRAL_INDEX = 'spectral_index'
@@ -200,6 +201,16 @@ class Observable:
             weight=weight,
         )
 
+
+    @classmethod
+    def expansion_age_pwn(cls, value: float, error: float,
+                          label: str = '', weight: float = 1.0) -> Observable:
+        """PWN expansion age R/v [yr]."""
+        return cls(
+            obs_type=ObsType.EXPANSION_AGE_PWN,
+            value=value, error=error, label=label or 'R/v_pwn [yr]',
+            weight=weight,
+        )
 
     @classmethod
     def angular_size_pwn_range(cls, lo: float, hi: float, sigma: float,
@@ -363,7 +374,8 @@ class Observable:
 def extract_observable(obs: Observable, photon_freqs: np.ndarray,
                        photon_spectrum: np.ndarray,
                        rad_pwn_pc: float, rad_snr_pc: float,
-                       distance_pc: float) -> float:
+                       distance_pc: float,
+                       vel_pwn_kms: float = np.nan) -> float:
     """Compute the model-predicted value of an observable.
 
     Parameters
@@ -378,6 +390,8 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
         PWN and SNR radii [pc].
     distance_pc : float
         Distance to the source [pc].
+    vel_pwn_kms : float
+        PWN shell velocity [km/s].
 
     Returns
     -------
@@ -389,6 +403,9 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
 
     elif obs.obs_type == ObsType.ANGULAR_SIZE_PWN:
         return _extract_angular_size(rad_pwn_pc, distance_pc, obs._angle_unit)
+
+    elif obs.obs_type == ObsType.EXPANSION_AGE_PWN:
+        return _extract_expansion_age(rad_pwn_pc, vel_pwn_kms)
 
     elif obs.obs_type == ObsType.FLUX_DENSITY:
         return _extract_flux_density(
@@ -420,11 +437,13 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
 def extract_all(observables: list[Observable],
                 photon_freqs: np.ndarray, photon_spectrum: np.ndarray,
                 rad_pwn_pc: float, rad_snr_pc: float,
-                distance_pc: float) -> np.ndarray:
+                distance_pc: float,
+                vel_pwn_kms: float = np.nan) -> np.ndarray:
     """Extract all observables at once.  Returns array of predicted values."""
     return np.array([
         extract_observable(obs, photon_freqs, photon_spectrum,
-                           rad_pwn_pc, rad_snr_pc, distance_pc)
+                           rad_pwn_pc, rad_snr_pc, distance_pc,
+                           vel_pwn_kms=vel_pwn_kms)
         for obs in observables
     ])
 
@@ -446,6 +465,13 @@ def _extract_angular_size(radius_pc: float, distance_pc: float,
     """Convert physical radius to angular size at a given distance."""
     theta_rad = radius_pc / distance_pc  # small-angle approximation
     return theta_rad * _ANGLE_FROM_RAD[unit]
+
+
+def _extract_expansion_age(radius_pc: float, vel_kms: float) -> float:
+    """R/v in years."""
+    if not vel_kms > 0:
+        return np.inf
+    return radius_pc * C.pc / (vel_kms * 1.0e5) / C.yr
 
 
 def _model_flux_density_cgs(freq_hz: float, photon_freqs: np.ndarray,

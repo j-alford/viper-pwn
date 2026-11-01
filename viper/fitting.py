@@ -400,6 +400,7 @@ def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
             spec.observables,
             result.photon_freqs, result.photon_spectrum,
             dyn.rad_pwn, dyn.rad_snr, distance_pc,
+            vel_pwn_kms=dyn.vpwn,
         )
     except Exception as exc:
         _note_eval_failure('extract_all', exc)
@@ -675,6 +676,7 @@ def predict_observables(
         spec.observables,
         result.photon_freqs, result.photon_spectrum,
         dyn.rad_pwn, dyn.rad_snr, vals['distance'],
+        vel_pwn_kms=dyn.vpwn,
     )
     return predicted, result
 

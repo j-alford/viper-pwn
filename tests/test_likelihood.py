@@ -10,6 +10,7 @@ import viper.fitting as F
 from viper import PWNModel
 from viper.evolution import PWNModelResult, DynState
 from viper.observables import Observable, extract_all
+from viper import constants as C
 
 
 # ===================================================================
@@ -18,6 +19,7 @@ from viper.observables import Observable, extract_all
 
 RAD_PWN_PC = 5.0
 RAD_SNR_PC = 15.0
+VPWN_KMS = 1500.0
 DIST_PC = 1000.0   # PWNModel default distance
 
 
@@ -32,7 +34,8 @@ def _fake_result(freqs=None, spectrum=None):
     if freqs is None:
         freqs, spectrum = _fake_spectrum()
     res = PWNModelResult()
-    res.dyninfo = [DynState(rad_pwn=RAD_PWN_PC, rad_snr=RAD_SNR_PC)]
+    res.dyninfo = [DynState(rad_pwn=RAD_PWN_PC, rad_snr=RAD_SNR_PC,
+                            vpwn=VPWN_KMS)]
     res.photon_freqs = freqs
     res.photon_spectrum = spectrum
     return res
@@ -56,7 +59,8 @@ def _predicted(observables):
     """Predicted values exactly as log_likelihood computes them."""
     freqs, spectrum = _fake_spectrum()
     return extract_all(observables, freqs, spectrum,
-                       RAD_PWN_PC, RAD_SNR_PC, DIST_PC)
+                       RAD_PWN_PC, RAD_SNR_PC, DIST_PC,
+                       vel_pwn_kms=VPWN_KMS)
 
 
 @pytest.fixture
@@ -89,6 +93,14 @@ class TestGaussianBranch:
         chi2 = sum(((p - o.value) / o.error) ** 2 for p, o in zip(pred, obs))
         ll = F.log_likelihood(THETA, spec)
         assert np.isfinite(ll)
+        assert ll == pytest.approx(-0.5 * chi2, rel=1e-12)
+
+    def test_expansion_age_uses_vpwn(self, fake_evolve):
+        obs = [Observable.expansion_age_pwn(900.0, 20.0)]
+        spec, _ = _make_spec(obs)
+        pred = RAD_PWN_PC * C.pc / (VPWN_KMS * 1e5) / C.yr
+        chi2 = ((pred - 900.0) / 20.0) ** 2
+        ll = F.log_likelihood(THETA, spec)
         assert ll == pytest.approx(-0.5 * chi2, rel=1e-12)
 
     def test_weights_multiply(self, fake_evolve):

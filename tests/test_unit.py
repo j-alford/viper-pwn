@@ -273,6 +273,16 @@ class TestObservableExtraction:
         result = extract_all(obs_list, freqs, lum_40, 5.0, 15.0, 1400.0)
         assert len(result) == 3
 
+    def test_extract_expansion_age(self):
+        freqs, lum_40 = _fake_spectrum()
+        obs = Observable.expansion_age_pwn(900.0, 20.0)
+        pred = extract_observable(obs, freqs, lum_40, 1.0, 15.0, 1400.0,
+                                  vel_pwn_kms=1000.0)
+        assert pred == pytest.approx(C.pc / 1.0e8 / C.yr, rel=1e-12)
+        pred = extract_observable(obs, freqs, lum_40, 1.0, 15.0, 1400.0,
+                                  vel_pwn_kms=0.0)
+        assert pred == np.inf
+
     def test_photon_flux_density_tev(self):
         """photons/cm2/s/TeV conversion: dN/dE = F_nu / (h^2 nu)."""
         freqs, lum_40 = _fake_spectrum()

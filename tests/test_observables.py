@@ -23,6 +23,11 @@ class TestValidConstructions:
         Observable.band_flux(2.0, 10.0, 'keV', 5.4e-12, 3.5e-14)
         Observable.spectral_index(2.0, 10.0, 'keV', 2.09, 0.01)
 
+    def test_expansion_age(self):
+        ob = Observable.expansion_age_pwn(896.0, 16.0)
+        assert ob.obs_type is ObsType.EXPANSION_AGE_PWN
+        assert ob.label == 'R/v_pwn [yr]'
+
 
 class TestRejectedConstructions:
 

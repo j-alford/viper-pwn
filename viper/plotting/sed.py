@@ -196,6 +196,7 @@ def plot_sed(config, theta, data_file: str = None,
                 continue
             if obs.obs_type in (ObsType.ANGULAR_SIZE_SNR,
                                 ObsType.ANGULAR_SIZE_PWN,
+                                ObsType.EXPANSION_AGE_PWN,
                                 ObsType.SPECTRAL_INDEX):
                 continue
 
@@ -258,7 +259,8 @@ def plot_sed(config, theta, data_file: str = None,
         res_markers = []
         for k, obs in enumerate(config.observables):
             if obs.obs_type in (ObsType.ANGULAR_SIZE_SNR,
-                                ObsType.ANGULAR_SIZE_PWN):
+                                ObsType.ANGULAR_SIZE_PWN,
+                                ObsType.EXPANSION_AGE_PWN):
                 continue
             if obs.obs_type == ObsType.SPECTRAL_INDEX:
                 continue

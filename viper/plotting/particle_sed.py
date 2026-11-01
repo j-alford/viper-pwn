@@ -192,6 +192,7 @@ def plot_sed_with_particles(config, theta, ax=None, figsize=(10, 7),
     for k, obs in enumerate(config.observables):
         if obs.obs_type in (ObsType.ANGULAR_SIZE_SNR,
                             ObsType.ANGULAR_SIZE_PWN,
+                            ObsType.EXPANSION_AGE_PWN,
                             ObsType.SPECTRAL_INDEX):
             continue
 
@@ -406,6 +407,7 @@ def plot_sed_with_particles(config, theta, ax=None, figsize=(10, 7),
         for k, obs in enumerate(config.observables):
             if obs.obs_type in (ObsType.ANGULAR_SIZE_SNR,
                                 ObsType.ANGULAR_SIZE_PWN,
+                                ObsType.EXPANSION_AGE_PWN,
                                 ObsType.SPECTRAL_INDEX):
                 continue
             if obs.obs_type != ObsType.FLUX_DENSITY:
