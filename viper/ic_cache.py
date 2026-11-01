@@ -170,10 +170,18 @@ def cached_ssc_tensor(elec, phot, target, flags) -> np.ndarray:
     return arr
 
 
+SSC_CHUNK = 50  # electron rows per float64 slab
+
+
 def ssc_power(tensor: np.ndarray, seed_number: np.ndarray) -> np.ndarray:
-    """Linear IC power (ne, np) of a seed field: A @ n."""
+    """Linear IC power (ne, np) of a seed field: A @ n, in slabs."""
     w = np.asarray(seed_number, dtype=np.float64)
-    return np.tensordot(tensor, w, axes=([2], [0])) / SSC_TENSOR_SCALE
+    out = np.empty(tensor.shape[:2], dtype=np.float64)
+    for i0 in range(0, tensor.shape[0], SSC_CHUNK):
+        slab = tensor[i0:i0 + SSC_CHUNK].astype(np.float64)
+        out[i0:i0 + SSC_CHUNK] = slab @ w
+    out /= SSC_TENSOR_SCALE
+    return out
 
 
 def clear() -> None:
