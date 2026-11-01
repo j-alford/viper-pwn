@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from functools import lru_cache
 
 import numpy as np
@@ -10,6 +11,7 @@ from scipy import integrate, special
 from scipy.interpolate import CubicSpline
 
 from .. import constants as C
+from .quadrature import QuadratureWarning
 
 __all__ = [
     "MEC2", "R0", "SIGMA_T", "A_RAD", "HBAR",
@@ -20,6 +22,7 @@ __all__ = [
     "ic_bb_F", "ic_blackbody_kernel", "ic_jones_kernel", "ic_seed_kernel",
     "ic_loss_function_iso", "ic_kn_moment_H", "ic_loss_rate_blackbody",
     "ic_loss_rate_seed", "planck_number_density", "T_CMB",
+    "SSC_UNIFORM_SPHERE",
 ]
 
 # derived constants
@@ -28,7 +31,8 @@ HBAR: float = C.h_cgs / (2.0 * np.pi)                   # erg s
 R0: float = C.e_charge**2 / MEC2                        # cm
 SIGMA_T: float = 8.0 * np.pi / 3.0 * R0**2              # cm^2
 A_RAD: float = 8.0 * np.pi**5 * C.k_B**4 / (15.0 * C.h_cgs**3 * C.c_light**3)
-T_CMB: float = 2.72548                                  # K, Fixsen 2009
+T_CMB: float = C.T_CMB                                  # K
+SSC_UNIFORM_SPHERE: float = 2.24                        # AA96
 
 _SQRT3 = np.sqrt(3.0)
 _SYN_AMP = _SQRT3 * C.e_charge**3 / MEC2               # erg/s/Hz/G
@@ -414,7 +418,11 @@ def ic_seed_kernel(eps: np.ndarray, gamma: np.ndarray, seed: SeedTable,
         scale = np.max(np.abs(cur)) if cur.size else 0.0
         sig = np.abs(cur) > 1e-12 * scale
         err = np.max(np.abs(cur - prev)[sig] / np.abs(cur[sig])) if np.any(sig) else 0.0
-        if err <= rtol or m >= max_panels:
+        if err <= rtol:
+            break
+        if m >= max_panels:
+            warnings.warn(f"seed kernel: rel_error {err:.2e} > rtol {rtol:.0e} "
+                          f"at {m} panels", QuadratureWarning, stacklevel=2)
             break
         prev = cur
     res = np.zeros_like(z)

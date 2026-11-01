@@ -7,7 +7,7 @@ import astropy.units as u_
 
 from . import kernels as K
 
-__all__ = ["Blackbody", "TableSeed", "ssc_seed", "as_seed"]
+__all__ = ["Seed", "Blackbody", "TableSeed", "ssc_seed", "as_seed"]
 
 _PRESETS = {
     # T [K], u [eV/cm^3]
@@ -17,7 +17,32 @@ _PRESETS = {
 }
 
 
-class Blackbody:
+class Seed:
+    """Isotropic or anisotropic seed field."""
+
+    name: str = "seed"
+
+    def photon_rate(self, eps: np.ndarray, gamma: np.ndarray,
+                    rtol: float) -> np.ndarray:
+        """IC photon rate, 1/(s erg)."""
+        raise NotImplementedError
+
+    def loss_rate(self, E: np.ndarray) -> np.ndarray:
+        """IC loss rate, erg/s."""
+        raise NotImplementedError
+
+    @property
+    def eps_max(self) -> float:
+        """Upper seed energy, erg."""
+        raise NotImplementedError
+
+    @property
+    def energy_density(self) -> u_.Quantity:
+        """Field energy density."""
+        raise NotImplementedError
+
+
+class Blackbody(Seed):
     """Blackbody seed field."""
 
     def __init__(self, T, u=None, theta=None, name: str | None = None) -> None:
@@ -39,24 +64,24 @@ class Blackbody:
 
     @property
     def energy_density(self) -> u_.Quantity:
-        """Field energy density."""
         if self.u is not None:
             return self.u
         return (K.A_RAD * self.T.value**4) * u_.erg / u_.cm**3
 
-    def _eps_max(self) -> float:
-        """Upper seed energy, 60 kT."""
+    @property
+    def eps_max(self) -> float:
         return 60.0 * K.C.k_B * float(self.T.value)
 
     def _u_cgs(self) -> float | None:
         return None if self.u is None else float(self.u.value)
 
-    def _kernel(self, eps: np.ndarray, gamma: np.ndarray, rtol: float) -> np.ndarray:
+    def photon_rate(self, eps: np.ndarray, gamma: np.ndarray,
+                    rtol: float) -> np.ndarray:
         theta = None if self.theta is None else float(self.theta.value)
         return K.ic_blackbody_kernel(eps, gamma, float(self.T.value),
                                      self._u_cgs(), theta)
 
-    def _loss(self, E: np.ndarray) -> np.ndarray:
+    def loss_rate(self, E: np.ndarray) -> np.ndarray:
         if self.theta is not None:
             raise NotImplementedError(
                 "loss rate implemented for isotropic seeds only")
@@ -68,8 +93,7 @@ class Blackbody:
         return f"Blackbody({self.T:.6g}{extra}{ang}, name={self.name!r})"
 
 
-
-class TableSeed:
+class TableSeed(Seed):
     """Tabulated isotropic seed field."""
 
     def __init__(self, energy, density, interpolation: str = "cubic",
@@ -88,25 +112,26 @@ class TableSeed:
 
     @property
     def energy_density(self) -> u_.Quantity:
-        """Table energy density."""
         return self.table.energy_density() * u_.erg / u_.cm**3
 
-    def _eps_max(self) -> float:
+    @property
+    def eps_max(self) -> float:
         return float(self.table.eps[-1])
 
-    def _kernel(self, eps: np.ndarray, gamma: np.ndarray, rtol: float) -> np.ndarray:
+    def photon_rate(self, eps: np.ndarray, gamma: np.ndarray,
+                    rtol: float) -> np.ndarray:
         return K.ic_seed_kernel(eps, gamma, self.table, rtol=rtol)
 
-    def _loss(self, E: np.ndarray) -> np.ndarray:
+    def loss_rate(self, E: np.ndarray) -> np.ndarray:
         return K.ic_loss_rate_seed(E, self.table)
 
     def __repr__(self) -> str:
         return f"TableSeed({self.table.eps.size} points, name={self.name!r})"
 
 
-def as_seed(seed) -> Blackbody | TableSeed:
+def as_seed(seed) -> Seed:
     """Coerce to a seed object."""
-    if isinstance(seed, (Blackbody, TableSeed)):
+    if isinstance(seed, Seed):
         return seed
     if isinstance(seed, str):
         return Blackbody(seed)
@@ -116,11 +141,11 @@ def as_seed(seed) -> Blackbody | TableSeed:
 def ssc_seed(synchrotron, R, geometry: str = "uniform_sphere",
              energy=None, factor: float | None = None,
              name: str = "SSC") -> TableSeed:
-    """Synchrotron seed, AA96 factor 2.24."""
+    """Synchrotron seed, uniform sphere."""
     if factor is None:
         if geometry != "uniform_sphere":
             raise ValueError("only geometry='uniform_sphere' is implemented")
-        factor = 2.24
+        factor = K.SSC_UNIFORM_SPHERE
     R_cm = u_.Quantity(R).to_value(u_.cm)
     if energy is None:
         gmin = synchrotron.Eemin.to_value(u_.erg) / K.MEC2

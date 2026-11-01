@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from scipy import integrate, special
 
+from viper import constants as C
 from viper.radiative import kernels as K
 
 LN = np.log
@@ -134,15 +135,29 @@ def test_turbulent_normalisation_identity():
     assert val == pytest.approx(0.75, rel=1e-10)
 
 
-def test_synch_photon_rate_matches_power():
+@pytest.mark.parametrize("kern", ["isotropic", "fixed", "turbulent"])
+def test_synch_photon_rate_matches_power(kern):
     B, g = 3e-5, np.array([1e4, 1e6, 1e8])
     eps = np.geomspace(1e-20, 1e-4, 50)
-    for kern in ("isotropic", "fixed", "turbulent"):
-        rate = K.synch_photon_rate(eps, g, B, kern)
-        P = K.synch_power_per_electron((eps / K.C.h_cgs)[None, :], g[:, None], B, kern)
-        want = P / (K.C.h_cgs * eps)
-        big = want > 1e-250
-        np.testing.assert_allclose(rate[big], want[big], rtol=1e-12)
+    rate = K.synch_photon_rate(eps, g, B, kern)
+    P = K.synch_power_per_electron((eps / K.C.h_cgs)[None, :], g[:, None], B, kern)
+    want = P / (K.C.h_cgs * eps)
+    big = want > 1e-250
+    np.testing.assert_allclose(rate[big], want[big], rtol=1e-12)
+
+
+def test_log_table_low_x_extrapolation():
+    """x^(1/3) below the table."""
+    x = 1e-12
+    assert K.synch_F(x) == pytest.approx(2.1495 * x ** (1 / 3), rel=1e-4)
+    assert K.synch_G(x) == pytest.approx(1.8084 * x ** (1 / 3), rel=1e-4)
+    assert K.synch_F(x) / K.synch_F(1e-9) == pytest.approx(1e-1, rel=1e-6)
+
+
+def test_log_table_upper_clip():
+    assert K.synch_F(2e3) == 0.0 and K.synch_G(2e3) == 0.0
+    np.testing.assert_array_equal(K.synch_F(np.array([2e3, 1e5])), 0.0)
+    assert K.synch_F(0.0) == 0.0 and K.synch_G(np.array([0.0, -1.0])).tolist() == [0.0, 0.0]
 
 
 # blackbody IC
@@ -153,9 +168,12 @@ def test_kak_F_exact_vs_definitions(x0):
     np.testing.assert_allclose(got, ref, rtol=1e-7)
 
 
-def test_kak_F_asymptotes():
-    for k in (1, 2, 3, 4):
-        assert K.ic_bb_F(k, 1e-14) == pytest.approx(np.pi**2 / 6, rel=1e-9)
+@pytest.mark.parametrize("k", [1, 2, 3, 4])
+def test_kak_F_small_x0_limit(k):
+    assert K.ic_bb_F(k, 1e-14) == pytest.approx(np.pi**2 / 6, rel=1e-9)
+
+
+def test_kak_F_large_x0_limits():
     x0 = 600.0
     assert K.ic_bb_F(3, x0) * np.exp(x0) == pytest.approx(1.0, rel=1e-9)
     assert K.ic_bb_F(4, x0) * np.exp(x0) == pytest.approx(1 - 2 / x0 + 8 / x0**2, rel=1e-6)
@@ -221,6 +239,26 @@ def test_bb_aniso_kernel_vs_planck_quadrature(gamma, eps_eV, theta):
     eps = eps_eV * 1.602176634e-12
     got = K.ic_blackbody_kernel(np.array([eps]), np.array([gamma]), T, theta=theta)[0, 0]
     assert got == pytest.approx(_aniso_planck_ref(eps, gamma, T, theta), rel=1e-4)
+
+
+def test_jones_kernel_thomson_identities():
+    """Number and power moments."""
+    gamma = 1e3
+    b = 1e-5
+    eps0 = b * K.MEC2 / (4 * gamma)
+    emax = gamma * K.MEC2 * b / (1 + b)
+    le = np.linspace(LN(emax * 1e-10), LN(emax * (1 - 1e-12)), 400001)
+    eps = np.exp(le)
+    k = K.ic_jones_kernel(eps, gamma, eps0)
+    number = integrate.simpson(k * eps, x=le) / (K.SIGMA_T * C.c_light)
+    power = integrate.simpson(k * eps**2, x=le) / (4 / 3 * K.SIGMA_T * C.c_light * gamma**2 * eps0)
+    assert number == pytest.approx(1.0, abs=1e-4)
+    assert power == pytest.approx(1.0, abs=1e-4)
+
+
+def test_cmb_temperature_follows_constants():
+    assert K.T_CMB == C.T_CMB
+    assert K.SSC_UNIFORM_SPHERE == 2.24
 
 
 def test_bb_kernel_2d_gamma_equals_outer():
