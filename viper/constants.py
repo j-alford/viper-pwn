@@ -45,6 +45,7 @@ GSZ2009 = SimpleNamespace(
     k_B=1.380658e-16,           # erg/K
     mec2_keV=510.998910,        # keV
     sigma_T=6.6524586e-25,      # cm^2
+    T_CMB=2.728,                # K
 )
 
 
@@ -65,6 +66,7 @@ def _astropy_set() -> SimpleNamespace:
         k_B=_ac.k_B.cgs.value,
         mec2_keV=(_ac.m_e * _ac.c**2).to(_u.keV).value,
         sigma_T=_ac.sigma_T.cgs.value,
+        T_CMB=2.7255,                                # Planck18 Tcmb0
     )
 
 
@@ -85,6 +87,7 @@ h_eV: float = _active.h_eV
 k_B: float = _active.k_B
 mec2_keV: float = _active.mec2_keV
 sigma_T: float = _active.sigma_T
+T_CMB: float = _active.T_CMB
 del _active
 
 # ---------------------------------------------------------------------------
@@ -134,7 +137,6 @@ PHOT_FREQ_MAX: float = 5.0e14 / h_eV      # Hz
 ELEC_GRID_FIXED_MIN: float = 1.0e-6      # GeV
 ELEC_GRID_FIXED_MAX: float = 1.0e8       # GeV
 ELEC_GRID_FIXED_NBINS: int = 500         # ~36 bins/decade
-T_CMB: float = 2.728                     # K
 
 # ---------------------------------------------------------------------------
 # Pre-computed logarithmic constants
