@@ -198,3 +198,20 @@ def test_evolve_ssc_tensor_vs_live_path():
     m = f1 > 1e-12 * f1.max()
     np.testing.assert_allclose(f2[m], f1[m], rtol=1e-5)
     assert fast.dyninfo[-1].bpwn == live.dyninfo[-1].bpwn   # cooling path untouched
+
+
+def test_field_lookup_needs_cmb_lookup():
+    from viper import PWNModel
+    m = PWNModel()
+    m.use_cmb_lookup = False
+    m.use_field_lookup = True
+    with pytest.raises(ValueError, match="use_field_lookup"):
+        m.validate()
+    with pytest.raises(ValueError, match="use_field_lookup"):
+        PWNModel().apply_run_config({'use_cmb_lookup': False,
+                                     'use_field_lookup': True})
+    kw = dict(esn_51=1.0, mej=6.0, n_ism=0.4, braking_index=2.5, tau_sd=3000.0,
+              age=2000.0, e0_37=28.0, vel_psr=0.0, eta_g=0.0, eta_b=0.03,
+              e_min=3.0, e_max=5.0e5, e_break=50.0, p1=0.8, p2=2.5)
+    with pytest.raises(ValueError, match="use_field_lookup"):
+        evolve_pwn(use_cmb_lookup=False, use_field_lookup=True, **kw)

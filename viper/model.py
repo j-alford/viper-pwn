@@ -416,6 +416,8 @@ class PWNModel:
                 f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
                 f"got {self.synch_kernel!r}"
             )
+        if self.use_field_lookup and not self.use_cmb_lookup:
+            problems.append("use_field_lookup needs use_cmb_lookup=True")
 
         if problems:
             raise ValueError(
@@ -502,6 +504,8 @@ class PWNModel:
         # Runner default True; constructor default False.
         self.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
         self.use_field_lookup = bool(run_cfg.get('use_field_lookup', False))
+        if self.use_field_lookup and not self.use_cmb_lookup:
+            raise ValueError("use_field_lookup needs use_cmb_lookup=True")
 
     def apply_frozen_params(self, frozen_params: dict) -> None:
         """Freeze parameters at config-supplied values (INTERNAL units).

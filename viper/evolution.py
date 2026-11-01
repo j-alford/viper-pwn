@@ -1305,6 +1305,8 @@ def evolve_pwn(
             f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
             f"got {synch_kernel!r}"
         )
+    if use_field_lookup and not use_cmb_lookup:
+        raise ValueError("use_field_lookup needs use_cmb_lookup=True")
     if ssc_model != 'off' and timestep_cooling == 'compat':
         logger.warning(
             "ssc_model=%r with timestep_cooling='compat': the compat "
