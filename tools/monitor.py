@@ -219,7 +219,7 @@ def main():
 
     _PARAM_UNITS = {
         'esn': 'e51 erg', 'mej': 'Msun', 'n_ism': 'cm-3',
-        'braking_index': '', 'tau_sd': 'yr', 'eta_b': '',
+        'braking_index': '', 'tau_sd': 'yr', 'i_ns': 'e45 g cm2', 'eta_b': '',
         'e_min': 'GeV', 'e_max': 'TeV', 'e_break': 'GeV',
         'p1': '', 'p2': '', 'distance': 'kpc',
         'ic_temp_1': 'K', 'ic_norm_1': 'scale',

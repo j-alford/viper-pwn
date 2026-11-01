@@ -44,7 +44,7 @@ _PARAM_DEFS = [
     ('p_dot',   None,  True,  False, None,     1.0,   'Period derivative [s/s, dimensionless]'),
     ('braking_index', 2.5, True, False, None,  1.0,   'Braking index'),
     ('tau_sd',  3000., True,  True,  'yr',     1.0,   'Spin-down timescale [yr]'),
-    ('i_ns',    1.0,   True,  True,  'g cm2',  1e-45, 'NS moment of inertia [internal: 10^45 g cm^2]'),
+    ('i_ns',    1.0,   True,  True,  '1e45 g cm2', 1.0, 'NS moment of inertia [10^45 g cm^2]'),
     # -- Pulsar wind --
     ('eta_b',   0.01,  True,  True,  None,     1.0,   'Wind magnetisation fraction'),
     ('e_min',   3.0,   True,  True,  'GeV',    1.0,   'Min particle energy [GeV]'),
