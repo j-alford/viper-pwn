@@ -17,6 +17,7 @@ folder holds:
     mcmc.pid         process id while the run is active
 """
 import os
+import shutil
 # must precede viper import
 os.environ.setdefault('NUMBA_NUM_THREADS', '1')
 
@@ -30,6 +31,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 import emcee
 from viper.fitting import (
+    starting_positions,
     run_mcmc, log_probability, log_prior,
     _init_worker, _log_prob_worker,
 )
@@ -221,32 +223,20 @@ def main():
 
     scatter = fit['scatter']
     seed = int(fit['seed'])
-    print(f"seed = {seed} (walker scatter + emcee proposals)")
+    what = "emcee proposals" if init_walkers else "walker scatter + emcee proposals"
+    print(f"seed = {seed} ({what})")
     rng = np.random.default_rng(seed)
-    scales = np.maximum(np.abs(p0_center) * scatter, 1e-3)
-    if not init_walkers:
-        p0 = p0_center + scales * rng.standard_normal((nwalkers, spec.ndim))
-    for i, fp in enumerate(spec.free_params):
-        lo, hi = fp.bounds
-        p0[:, i] = np.clip(p0[:, i], lo + 1e-10, hi - 1e-10)
-    # Walkers must start where the prior is finite (an AGE range can cut a
-    # thin slice through the scatter ball); redraw the ones that do not.
-    bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
-    for _ in range(1000):
-        if not bad.any():
-            break
-        p0[bad] = p0_center + scales * rng.standard_normal((bad.sum(), spec.ndim))
-        for i, fp in enumerate(spec.free_params):
-            lo, hi = fp.bounds
-            p0[bad, i] = np.clip(p0[bad, i], lo + 1e-10, hi - 1e-10)
-        bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
-    if bad.any():
-        print(f"{bad.sum()} of {nwalkers} walkers still start outside the prior "
-              f"after 1000 redraws; reduce FIT['scatter'] or move the start.")
+    try:
+        p0 = starting_positions(spec, p0_center, nwalkers, scatter, rng,
+                                walkers=p0 if init_walkers else None)
+    except ValueError as exc:
+        print(exc)
         return 2
 
     if new_from_file:
         start_run(args.target, outdir)
+    if init_walkers:
+        shutil.copy(init_walkers, os.path.join(outdir, 'init_walkers.npy'))
     print(f"Run folder: {outdir}")
     os.environ['VIPER_SOURCE_FILE'] = os.path.abspath(snapshot_path(outdir))
 

@@ -615,6 +615,39 @@ def _init_walkers(
     return p0
 
 
+def starting_positions(spec: _FitSpec, center, nwalkers: int, scatter: float,
+                       rng: np.random.Generator, walkers=None,
+                       max_redraws: int = 1000) -> np.ndarray:
+    """Walker start positions in fit space."""
+    ndim = spec.ndim
+    lo = np.array([fp.bounds[0] for fp in spec.free_params]) + 1e-10
+    hi = np.array([fp.bounds[1] for fp in spec.free_params]) - 1e-10
+    if walkers is not None:
+        p0 = np.array(walkers, dtype=float)
+        if p0.shape != (nwalkers, ndim):
+            raise ValueError(
+                f"init_walkers has shape {p0.shape}; the fit needs "
+                f"({nwalkers}, {ndim}) = (FIT['nwalkers'], free parameters)")
+        p0 = np.clip(p0, lo, hi)
+        bad = [i for i, w in enumerate(p0) if not np.isfinite(log_prior(w, spec))]
+        if bad:
+            raise ValueError(f"init_walkers rows outside the prior: {bad}")
+        return p0
+    center = np.asarray(center, dtype=float)
+    scales = np.maximum(np.abs(center) * scatter, 1e-3)
+    p0 = np.clip(center + scales * rng.standard_normal((nwalkers, ndim)), lo, hi)
+    bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
+    for _ in range(max_redraws):
+        if not bad.any():
+            return p0
+        p0[bad] = np.clip(center + scales * rng.standard_normal((bad.sum(), ndim)),
+                          lo, hi)
+        bad = np.array([not np.isfinite(log_prior(w, spec)) for w in p0])
+    raise ValueError(
+        f"{bad.sum()} of {nwalkers} walkers still start outside the prior "
+        f"after {max_redraws} redraws; reduce FIT['scatter'] or move the start.")
+
+
 # Post-processing helpers
 
 def get_best_fit(
