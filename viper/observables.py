@@ -213,6 +213,18 @@ class Observable:
         )
 
     @classmethod
+    def expansion_age_pwn_range(cls, lo: float, hi: float, sigma: float,
+                                label: str = '', weight: float = 1.0) -> Observable:
+        """PWN expansion age R/v [yr], flat-top in [lo, hi]."""
+        return cls(
+            obs_type=ObsType.EXPANSION_AGE_PWN,
+            value=0.5 * (lo + hi), error=sigma,
+            label=label or f'R/v_pwn [yr] ({lo:g}-{hi:g})',
+            range_lo=lo, range_hi=hi,
+            weight=weight,
+        )
+
+    @classmethod
     def angular_size_pwn_range(cls, lo: float, hi: float, sigma: float,
                                unit: str = 'arcmin', label: str = '',
                                weight: float = 1.0) -> Observable:

@@ -28,6 +28,12 @@ class TestValidConstructions:
         assert ob.obs_type is ObsType.EXPANSION_AGE_PWN
         assert ob.label == 'R/v_pwn [yr]'
 
+    def test_expansion_age_range(self):
+        ob = Observable.expansion_age_pwn_range(771.0, 935.0, 20.0)
+        assert ob.obs_type is ObsType.EXPANSION_AGE_PWN
+        assert (ob.range_lo, ob.range_hi, ob.error) == (771.0, 935.0, 20.0)
+        assert ob.label == 'R/v_pwn [yr] (771-935)'
+
 
 class TestRejectedConstructions:
 
