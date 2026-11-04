@@ -453,3 +453,26 @@ class TestRealEvolutionSmoke:
         ll = F.log_likelihood(np.array([0.0]), spec)
         assert np.isfinite(ll)
         assert ll <= 0.0
+
+
+class TestExpansionAgeVelocity:
+
+    @pytest.mark.parametrize("vpwn", [0.0, -300.0, np.nan])
+    def test_nonpositive_velocity_rejects(self, monkeypatch, vpwn):
+        obs = [Observable.expansion_age_pwn(900.0, 20.0, weight=0.0),
+               Observable.angular_size_pwn(17.0, 1.0, 'arcmin')]
+        spec, _ = _make_spec(obs)
+
+        def _fake(**kw):
+            res = _fake_result()
+            res.dyninfo[0].vpwn = vpwn
+            return res
+
+        monkeypatch.setattr(F, 'evolve_pwn', _fake)
+        assert F.log_likelihood(THETA, spec) == -np.inf
+
+    def test_velocity_argument_required(self):
+        freqs, spectrum = _fake_spectrum()
+        with pytest.raises(ValueError, match="vel_pwn_kms"):
+            extract_all([Observable.expansion_age_pwn(900.0, 20.0)], freqs,
+                        spectrum, RAD_PWN_PC, RAD_SNR_PC, DIST_PC)

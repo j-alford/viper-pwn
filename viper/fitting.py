@@ -412,6 +412,8 @@ def log_likelihood(theta: np.ndarray, spec: _FitSpec) -> float:
                 continue
             if np.isnan(predicted[k]):
                 return -np.inf
+    if np.any(np.isinf(predicted)):
+        return -np.inf
 
     chi2 = 0.0
     for k, obs in enumerate(spec.observables):

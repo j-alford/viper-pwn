@@ -387,7 +387,7 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
                        photon_spectrum: np.ndarray,
                        rad_pwn_pc: float, rad_snr_pc: float,
                        distance_pc: float,
-                       vel_pwn_kms: float = np.nan) -> float:
+                       vel_pwn_kms: Optional[float] = None) -> float:
     """Compute the model-predicted value of an observable.
 
     Parameters
@@ -417,6 +417,8 @@ def extract_observable(obs: Observable, photon_freqs: np.ndarray,
         return _extract_angular_size(rad_pwn_pc, distance_pc, obs._angle_unit)
 
     elif obs.obs_type == ObsType.EXPANSION_AGE_PWN:
+        if vel_pwn_kms is None:
+            raise ValueError("expansion_age_pwn requires the vel_pwn_kms argument")
         return _extract_expansion_age(rad_pwn_pc, vel_pwn_kms)
 
     elif obs.obs_type == ObsType.FLUX_DENSITY:
@@ -450,7 +452,7 @@ def extract_all(observables: list[Observable],
                 photon_freqs: np.ndarray, photon_spectrum: np.ndarray,
                 rad_pwn_pc: float, rad_snr_pc: float,
                 distance_pc: float,
-                vel_pwn_kms: float = np.nan) -> np.ndarray:
+                vel_pwn_kms: Optional[float] = None) -> np.ndarray:
     """Extract all observables at once.  Returns array of predicted values."""
     return np.array([
         extract_observable(obs, photon_freqs, photon_spectrum,
