@@ -1,5 +1,10 @@
 # VIPER - Volume-Integrated PWN Evolution & Radiation
 
+[![PyPI](https://img.shields.io/pypi/v/viper-pwn.svg)](https://pypi.org/project/viper-pwn/)
+[![Python](https://img.shields.io/pypi/pyversions/viper-pwn.svg)](https://pypi.org/project/viper-pwn/)
+[![Docs](https://readthedocs.org/projects/viper-pwn/badge/?version=latest)](https://viper-pwn.readthedocs.io/en/latest/)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+
 A Python implementation of the semi-analytic PWN model described in
 **Gelfand, Slane & Zhang (2009), ApJ 703, 2051**.
 
