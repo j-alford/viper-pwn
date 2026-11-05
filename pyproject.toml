@@ -28,7 +28,7 @@ classifiers = [
 [project.optional-dependencies]
 plot = ["matplotlib>=3.5"]
 fast = ["numba>=0.57"]
-fit = ["emcee>=3.0", "corner"]
+fit = ["emcee>=3.0", "corner", "h5py"]
 gammapy = [
     "gammapy>=2.0",
     # gammapy 2.1 imports a private regions API removed in regions 0.12
