@@ -4,6 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/viper-pwn.svg)](https://pypi.org/project/viper-pwn/)
 [![Docs](https://readthedocs.org/projects/viper-pwn/badge/?version=latest)](https://viper-pwn.readthedocs.io/en/latest/)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23984295.svg)](https://doi.org/10.5281/zenodo.23984295)
 
 A Python implementation of the semi-analytic PWN model described in
 **Gelfand, Slane & Zhang (2009), ApJ 703, 2051**.

@@ -7,8 +7,14 @@ type: software
 authors:
   - family-names: Alford
     given-names: Jason
+    affiliation: New York University Abu Dhabi
+    orcid: https://orcid.org/0000-0002-2312-8539
 license: BSD-3-Clause
 repository-code: "https://github.com/j-alford/viper-pwn"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23984295
+    description: all versions
 references:
   - type: article
     title: >-
