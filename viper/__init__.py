@@ -35,7 +35,7 @@ Package structure
 
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .parameter import Parameter, ParameterSet
 from .evolution import evolve_pwn, PWNModelResult, DynState

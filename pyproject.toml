@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "viper-pwn"
-version = "0.3.0.post1"
+dynamic = ["version"]
 description = "VIPER (Volume-Integrated PWN Evolution & Radiation)"
 readme = "README.md"
 authors = [{ name = "Jason Alford" }]
@@ -17,6 +17,11 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 
@@ -52,6 +57,9 @@ Homepage = "https://github.com/j-alford/viper-pwn"
 Documentation = "https://viper-pwn.readthedocs.io"
 Repository = "https://github.com/j-alford/viper-pwn"
 Issues = "https://github.com/j-alford/viper-pwn/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "viper.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["viper*"]
