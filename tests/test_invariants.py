@@ -1,4 +1,4 @@
-"""Integrator-independent physics invariants: energy identities, closures, analytic limits."""
+"""Integrator-independent physics invariants: energy identities, budgets, analytic limits."""
 import json
 from pathlib import Path
 
@@ -17,7 +17,7 @@ GRID_JSON = ROOT / 'tests' / 'reference' / 'grid' / 'grid.json'
 POINTS = ['g54_baseline', 'cta1_aliu_pre', 'corner_dense_ism']
 INTEGRATORS = ['euler', 'pc_full']
 
-# radiation-negligible closure override
+# radiation-negligible budget override
 RADLESS = dict(eta_b=1e-9, e_min=0.1, e_max=1.0e4, e_break=100.0,
                ic_temps=[], ic_norms=[])
 
@@ -134,7 +134,7 @@ def test_magnetic_energy_identity(runner, point, integration):
 
 
 # ---------------------------------------------------------------------------
-# Particle-energy closure: strict before the collision, tracked after
+# Particle-energy budget: strict before the collision, tracked after
 # ---------------------------------------------------------------------------
 
 def _particle_gap(params, s, eta_b):
@@ -147,12 +147,12 @@ def _particle_gap(params, s, eta_b):
 
 @pytest.mark.parametrize('integration,tol', [('euler', 2e-3),
                                              ('pc_full', 3e-2)])
-def test_particle_closure_pre_collision(runner, integration, tol):
+def test_particle_budget_pre_collision(runner, integration, tol):
     """Electron-spectrum energy follows adiabatic+injection (radiation-negligible)."""
     params, r = runner('g54_baseline', integration, overrides=RADLESS)
     s = _series(r)
     gap = _particle_gap(params, s, RADLESS['eta_b'])
-    assert gap < tol, f'particle closure gap {gap:.3e} > {tol:g}'
+    assert gap < tol, f'particle budget gap {gap:.3e} > {tol:g}'
 
 
 @pytest.mark.parametrize('integration', INTEGRATORS)
