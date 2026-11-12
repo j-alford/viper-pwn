@@ -1,5 +1,7 @@
 """Closed forms and harnesses for the analytic-limit tests."""
 import numpy as np
+from scipy.integrate import quad
+from scipy.special import gamma as gamma_fn, kv, zeta
 
 import viper.constants as C
 from viper.grids import make_log_grid
@@ -150,3 +152,110 @@ def band_ratio(grid, num, ana, lo, hi):
 
 def bins_per_decade(grid):
     return 1.0 / (grid.log_max[2] - grid.log_max[1])
+
+
+# --- radiation closed forms ----------------------------------------------
+
+def mc2():
+    return C.m_electron * C.c_light ** 2
+
+
+def powerlaw_bin_counts(grid, k, p, e_lo_erg, e_hi_erg):
+    """Counts (1e40 units) of k E^-p (E in erg) per bin of a GeV grid."""
+    lo = grid.bin_min / C.GeV_per_erg
+    hi = grid.bin_max / C.GeV_per_erg
+    n = powerlaw_counts(lo, hi, k, p, e_lo_erg, e_hi_erg)
+    n[grid.bin_min <= 0] = 0.0
+    return n / 1e40
+
+
+def synch_fx_quad(x):
+    """F(x) = x int_x^inf K_5/3."""
+    return x * quad(lambda t: kv(5.0 / 3.0, t), x, np.inf)[0]
+
+
+def synch_powerlaw_integral(p):
+    """int x^((p-3)/2) F(x) dx, Gamma form (RL 6.36)."""
+    return (2.0 ** ((p + 1) / 2) / (p + 1)
+            * gamma_fn(p / 4 + 19 / 12) * gamma_fn(p / 4 - 1 / 12))
+
+
+def pitch_angle_factor(p, kind):
+    """<sin a^((p+1)/2)> isotropic, or the fixed-angle kernel factors."""
+    s = np.sqrt(2.0 / 3.0)
+    if kind == 'isotropic':
+        return np.sqrt(np.pi) / 2 * gamma_fn((p + 5) / 4) / gamma_fn((p + 7) / 4)
+    if kind == 'rms_pitch':
+        return s ** ((p + 1) / 2)
+    if kind == 'legacy':
+        return 2.0 / 3.0 * s ** ((p - 1) / 2)
+    raise ValueError(kind)
+
+
+def synch_nu_c(e_erg, b_gauss):
+    """3 e B gamma^2 / (4 pi m c), sin a = 1."""
+    a = 3.0 * C.e_charge * b_gauss / (4.0 * np.pi * C.m_electron * C.c_light)
+    return a * (e_erg / mc2()) ** 2
+
+
+def synch_powerlaw_lnu(nu, k, p, b_gauss, kind='isotropic'):
+    """L_nu [erg/s/Hz] of N(E) = k E^-p (E erg) in a uniform field."""
+    c_gamma = k * mc2() ** (1.0 - p)
+    amp = np.sqrt(3.0) * C.e_charge ** 3 * b_gauss / mc2()
+    a = synch_nu_c(mc2(), b_gauss)
+    return (c_gamma * amp * 0.5 * (nu / a) ** (-(p - 1) / 2)
+            * synch_powerlaw_integral(p) * pitch_angle_factor(p, kind))
+
+
+def planck_number_density(eps_erg, temp):
+    """Photons per cm^3 per erg."""
+    return (8.0 * np.pi / (C.h_cgs * C.c_light) ** 3 * eps_erg ** 2
+            / np.expm1(eps_erg / (C.k_B * temp)))
+
+
+def thomson_loss_rate(e_erg, u_erg):
+    """(4/3) sigma_T c gamma^2 u."""
+    return 4.0 / 3.0 * C.sigma_T * C.c_light * (e_erg / mc2()) ** 2 * u_erg
+
+
+def ic_thomson_J(p):
+    """int_0^1 q^((p-1)/2) (2 q ln q + 1 + q - 2 q^2) dq."""
+    return 4.0 * (p * p + 4 * p + 11) / ((p + 1) * (p + 3) ** 2 * (p + 5))
+
+
+def ic_thomson_blackbody_lnu(nu, k, p, temp):
+    """L_nu [erg/s/Hz] of N(E) = k E^-p on a blackbody, Thomson limit."""
+    c_gamma = k * mc2() ** (1.0 - p)
+    e1 = C.h_cgs * nu
+    kt = C.k_B * temp
+    rate = (c_gamma * 3.0 * C.sigma_T * C.c_light / 8.0 * 4.0 ** ((p + 1) / 2)
+            * ic_thomson_J(p) * 8.0 * np.pi / (C.h_cgs * C.c_light) ** 3
+            * kt ** ((p + 5) / 2) * gamma_fn((p + 5) / 2) * zeta((p + 5) / 2)
+            * e1 ** (-(p + 1) / 2))
+    return e1 * rate * C.h_cgs
+
+
+def jones_power_per_photon(gamma, eps0):
+    """Energy loss rate per unit target density, BG70 eq. 2.48 [erg cm^3/s]."""
+    big = 4.0 * eps0 * gamma / mc2()
+
+    def integrand(q):
+        e1 = big * q * gamma * mc2() / (1.0 + big * q)
+        de1 = big * gamma * mc2() / (1.0 + big * q) ** 2
+        f = (2.0 * q * np.log(q) + (1.0 + 2.0 * q) * (1.0 - q)
+             + 0.5 * (big * q) ** 2 * (1.0 - q) / (1.0 + big * q))
+        return e1 * f * de1
+
+    val = quad(integrand, 0.25 / gamma ** 2, 1.0, limit=200, epsrel=1e-10)[0]
+    return 3.0 * C.sigma_T * C.c_light / (4.0 * gamma ** 2 * eps0) * val
+
+
+def jones_loss_rate(e_erg, temp, u_erg=None):
+    """IC loss rate on a blackbody by quadrature [erg/s]."""
+    g = e_erg / mc2()
+    kt = C.k_B * temp
+    scale = 1.0 if u_erg is None else u_erg / (C.radiation_const * temp ** 4)
+    val = quad(lambda x: planck_number_density(x * kt, temp) * kt
+               * jones_power_per_photon(g, x * kt), 1e-3, 60.0,
+               limit=200, epsrel=1e-9)[0]
+    return scale * val
