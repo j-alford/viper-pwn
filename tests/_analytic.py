@@ -259,3 +259,29 @@ def jones_loss_rate(e_erg, temp, u_erg=None):
                * jones_power_per_photon(g, x * kt), 1e-3, 60.0,
                limit=200, epsrel=1e-9)[0]
     return scale * val
+
+
+# --- timestep ladders ----------------------------------------------------
+
+def loguniform_dts(t0, age, h):
+    """Steps of constant dt/t = h from t0 to age."""
+    ts = [t0]
+    while ts[-1] * (1.0 + h) < age:
+        ts.append(ts[-1] * (1.0 + h))
+    ts.append(age)
+    return list(np.diff(ts))
+
+
+def refine_dts(dts, k):
+    """Every dt split k ways, sum preserved exactly."""
+    seq = [d / k for d in dts for _ in range(k)]
+    seq[-1] += sum(dts) - sum(seq)
+    return seq
+
+
+def pair_orders(values):
+    """log2 of successive difference ratios along a halving ladder."""
+    v = np.asarray(values, float)
+    d = np.abs(np.diff(v))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.log2(d[:-1] / d[1:])
