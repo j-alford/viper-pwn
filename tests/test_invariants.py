@@ -166,7 +166,7 @@ def test_eparfudge_pre_collision(runner, integration):
         f'{epf.max():.4f}]')
 
 
-def test_post_collision_energy_divergence_registered(runner):
+def test_post_collision_energy_divergence_known(runner):
     """Post-collision energy-accounting divergence must stay present."""
     params, r = runner('cta1_aliu_pre', 'euler')
     epf = _series(r)['epf']

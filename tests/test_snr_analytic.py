@@ -147,6 +147,6 @@ def test_quiet_pulsar_snr_follows_tm99(quiet_pulsar):
 
 @pytest.mark.slow
 def test_quiet_pulsar_reverse_shock_runs_past_centre(quiet_pulsar):
-    """Registered: eq. 83 is applied beyond R_r = 0 (lhs_060 fork)."""
+    """Known: eq. 83 is applied beyond R_r = 0."""
     rr = np.array([x.rad_rs for x in quiet_pulsar])
     assert rr[-1] < 0

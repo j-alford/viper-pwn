@@ -52,8 +52,10 @@ class CoolingHarness:
     """evolve_spectrum at fixed B and dt; E_N R_N = E_0 R_0 / (1 + b E_0 R_0 Theta)."""
 
     def __init__(self, n_bins, b_gauss, dt_s, e_grid_lo=1e-6, e_grid_hi=1e8,
-                 r0_cm=C.pc, eps=1e-6, n_elec_40=1e-30, pow_ic=None):
+                 r0_cm=C.pc, eps=1e-6, n_elec_40=1e-30, pow_ic=None,
+                 **spectrum_kwargs):
         self.grid = make_log_grid(e_grid_lo, e_grid_hi, n_bins)
+        self.spectrum_kwargs = spectrum_kwargs
         self.b = b_gauss
         self.dt = dt_s
         self.eps = eps
@@ -83,7 +85,8 @@ class CoolingHarness:
         nxt.reset_number(0.0)
         self.last = evolve_spectrum(
             self.cur, nxt, self.b, self.r, r_new, v,
-            self.n_elec_40, self.min_ic_bin, self.pow_ic)
+            self.n_elec_40, self.min_ic_bin, self.pow_ic,
+            **self.spectrum_kwargs)
         if inject is not None:
             nxt.number += inject
             nxt.update_log_number()

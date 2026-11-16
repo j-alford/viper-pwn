@@ -199,7 +199,7 @@ class TestKleinNishinaPower:
         assert abs(pie[sel] / exact - 1.0).max() < 1.5e-2
 
     def test_power_lost_above_photon_grid_ceiling(self, cmb):
-        """Registered: the overflow photon bin corrupts IC power above h nu_max."""
+        """Known error: the overflow photon bin corrupts IC power above h nu_max."""
         elec, pie = cmb
         e_erg = elec.bin_avg / C.GeV_per_erg
         exact = K.ic_loss_rate_blackbody(e_erg, C.T_CMB) * SIG
@@ -213,7 +213,7 @@ class TestKleinNishinaPower:
         assert tall[i6] == pytest.approx(exact[i6], rel=3e-2)
 
     def test_deep_kn_power_depends_on_photon_grid(self):
-        """Registered: 3000 K target, b ~ 1e3, power follows the photon binning."""
+        """Known error: 3000 K target, b ~ 1e3, power follows the photon binning."""
         elec = make_log_grid(1e5, 9e5, 12)
         i = np.argmin(abs(elec.bin_avg - 3e5))
         exact = jones_loss_rate(elec.bin_avg[i] / C.GeV_per_erg, 3000.0)

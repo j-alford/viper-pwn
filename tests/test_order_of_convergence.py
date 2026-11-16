@@ -90,7 +90,7 @@ def test_everything_is_first_order_in_dt(integration, eta_b):
 
 @pytest.mark.parametrize('integration', INTEGRATORS)
 def test_native_timestep_error(integration):
-    """Registered: error of the native dt sequence against its dt -> 0 limit."""
+    """Known: error of the native dt sequence against its dt -> 0 limit."""
     ks = (1, 2, 4, 8, 16, 32)
     dts = _native_dts(BASE, integration)
     q = _ladder(BASE, integration, dts, ks)

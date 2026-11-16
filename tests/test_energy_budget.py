@@ -91,7 +91,7 @@ def test_edge_map_closes_pre_collision(cta1):
 
 @pytest.mark.slow
 def test_edge_map_breaks_only_in_the_deep_crush(cta1):
-    """Registered: self-absorption threshold bin loses its energy accounting (WP6)."""
+    """Known error: the self-absorption threshold bin loses its energy accounting (threshold_bin='edges')."""
     e, R = cta1['edge'], cta1['R'][1:]
     bad = np.abs(e) > 1e-2
     assert 1 <= bad.sum() <= 40
@@ -101,7 +101,7 @@ def test_edge_map_breaks_only_in_the_deep_crush(cta1):
 
 @pytest.mark.slow
 def test_corrector_radius_differs_from_spectral_update_radius(cta1, request):
-    """Registered: pc_full evolves the spectrum at the predictor radius."""
+    """Known: pc_full evolves the spectrum at the predictor radius."""
     m = np.abs(cta1['r_mismatch'])
     if request.node.callspec.params['cta1'] == 'euler':
         assert m.max() < 1e-12
@@ -144,4 +144,4 @@ def test_threshold_bin_breaks_the_edge_map_identity():
     res_thick, frac_thick = _step_identity(grid, ibin - 3, b, ne, r0, 0.8 * r0, dt)
     assert frac_thin > 0.5 and frac_thick == 0.0
     assert abs(res_thin) < 1e-3 and abs(res_thick) < 1e-3
-    assert res_thr > 0.1                           # registered
+    assert res_thr > 0.1                           # known error

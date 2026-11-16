@@ -109,8 +109,8 @@ def test_particle_energy_excess_shrinks_with_bins():
     assert x2000 < 0.6 * x500
 
 
-def test_native_stepping_energy_excess_registered():
-    """Quiet config steps at dt/t ~ 0.25 and carries +15 % energy (WP5/WP6)."""
+def test_native_stepping_energy_excess_known():
+    """Quiet config steps at dt/t ~ 0.25 and carries +15 % energy (injection_credit='end')."""
     for integration in ('euler', 'pc_full'):
         r = _run(integration, k=1)
         t, dt = r['t'], r['dt']
