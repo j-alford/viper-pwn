@@ -17,7 +17,8 @@ from _analytic import (CoolingHarness, band_ratio, powerlaw_norm,
                        steady_state_counts, synch_b_coeff)
 
 ALL_ON = dict(injection_credit='midstep', remap='powerlaw',
-              threshold_bin='centre', ic_cooling='exact')
+              threshold_bin='centre', ic_cooling='exact',
+              cooling_field='mean')
 B = 1e-4
 E_LO, E_HI, P = 10.0, 1e5, 2.3
 
@@ -26,16 +27,17 @@ E_LO, E_HI, P = 10.0, 1e5, 2.3
 
 def test_option_defaults():
     for k in ALL_ON:
-        assert OPTION_DEFAULTS[k] in ('end', 'uniform', 'edges', 'table')
+        assert OPTION_DEFAULTS[k] in ('end', 'uniform', 'edges', 'table', 'start')
     m = PWNModel()
-    assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling) == (
-        'end', 'uniform', 'edges', 'table')
+    assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling,
+            m.cooling_field) == ('end', 'uniform', 'edges', 'table', 'start')
 
 
 @pytest.mark.parametrize('name,bad', [('injection_credit', 'half'),
                                       ('remap', 'linear'),
                                       ('threshold_bin', 'mean'),
-                                      ('ic_cooling', 'kn')])
+                                      ('ic_cooling', 'kn'),
+                                      ('cooling_field', 'end')])
 def test_rejects_unknown_value(name, bad):
     kw = dict(esn_51=1.0, mej=8.0, n_ism=0.1, braking_index=3.0, tau_sd=500.0,
               age=100.0, e0_37=1.0, vel_psr=0.0, eta_g=0.0, eta_b=0.01,
@@ -49,13 +51,14 @@ def test_rejects_unknown_value(name, bad):
 def test_model_and_fit_spec_carry_options():
     m = PWNModel()
     m.apply_run_config(dict(ALL_ON))
-    assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling) == (
-        'midstep', 'powerlaw', 'centre', 'exact')
+    assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling,
+            m.cooling_field) == ('midstep', 'powerlaw', 'centre', 'exact', 'mean')
     m.eta_b.frozen = False
     m.eta_b.bounds = (1e-4, 0.5)
     spec = build_fit_spec(m, [])
     assert (spec.injection_credit, spec.remap, spec.threshold_bin,
-            spec.ic_cooling) == ('midstep', 'powerlaw', 'centre', 'exact')
+            spec.ic_cooling, spec.cooling_field) == (
+        'midstep', 'powerlaw', 'centre', 'exact', 'mean')
 
 
 # --- spectral update: numpy and numba paths agree --------------------------------
@@ -84,7 +87,7 @@ def test_backends_agree(remap, thr):
     assert new.number.sum() == pytest.approx(g.number.sum(), rel=1e-12)
 
 
-# --- 6a: slope-aware remap ---------------------------------------------------------
+# --- slope-aware remap ---------------------------------------------------------
 
 @pytest.mark.parametrize('nb', [252, 502])
 def test_remap_removes_steady_state_bias(nb):
@@ -105,7 +108,7 @@ def test_remap_removes_steady_state_bias(nb):
     assert abs(ex['powerlaw']) < 5e-3
 
 
-# --- 6d: self-absorption threshold at the bin centre ------------------------------
+# --- self-absorption threshold at the bin centre ------------------------------
 
 def test_threshold_bin_identity_closes():
     b, ne, r0 = 3.0, 1.0e9, 0.005 * C.pc
@@ -131,7 +134,7 @@ def test_threshold_bin_identity_closes():
     assert abs(res['centre']) < 1e-3
 
 
-# --- 6e: exact IC loss rate ------------------------------------------------------------
+# --- exact IC loss rate ------------------------------------------------------------
 
 def test_exact_ic_loss_matches_closed_form():
     grid = make_log_grid(1e-3, 1e8, 502)
@@ -143,7 +146,7 @@ def test_exact_ic_loss_matches_closed_form():
     assert np.all(pie > 0)
 
 
-# --- 6c: mid-step credit (slow, full runs) --------------------------------------------
+# --- mid-step injection (slow, full runs) --------------------------------------------
 
 FREE = dict(esn_51=1.0, mej=8.0, n_ism=0.1, braking_index=3.0, tau_sd=1e9,
             age=3000.0, e0_37=4.1728412947090015e-06, vel_psr=0.0, eta_g=0.0,
@@ -191,6 +194,51 @@ def test_midstep_credit_reduces_magnetic_energy_error():
         err[credit] = abs(q[1]['Eb'] / q[16]['Eb'] - 1.0)
     assert err['end'] > 1.5e-2
     assert err['midstep'] < 0.3 * err['end']
+
+
+def _native_vs_limit(kw, ks=(8, 16)):
+    """Native-timestep result over its Richardson limit, minus one."""
+    from test_order_of_convergence import _functionals
+    from _analytic import refine_dts
+    base = evolve_pwn(integration='euler', **kw)
+    dts = [float(x.delta_t) for x in base.dyninfo][:-1]
+    ref = [evolve_pwn(integration='euler', **kw, **ALL_ON,
+                      replay_dt_sequence=refine_dts(dts, k)) for k in ks]
+    on = evolve_pwn(integration='euler', **kw, **ALL_ON,
+                    replay_dt_sequence=dts)
+
+    def err(f):
+        a, b = (f(r) for r in ref)
+        lim = 2.0 * b - a
+        return f(base) / lim - 1.0, f(on) / lim - 1.0
+    return err, _functionals, on.elec_grid.bin_avg
+
+
+@pytest.mark.slow
+def test_all_options_remove_native_timestep_error():
+    """g54-like run: X-ray, TeV and particle energy against the dt -> 0 limit."""
+    from test_order_of_convergence import BASE
+    err, fn, _ = _native_vs_limit(BASE)
+    for name, floor, tol in (('xray', 5e-2, 1.5e-2), ('tev', 2e-2, 1e-2),
+                             ('Ep', 1.5e-2, 1e-2), ('Eb', 1.5e-2, 1e-2)):
+        off, on = err(lambda r: fn(r)[name])
+        assert abs(off) > floor, (name, off)
+        assert abs(on) < tol, (name, on)
+
+
+@pytest.mark.slow
+def test_injection_above_a_pev_is_cooled_within_the_step():
+    """Young source, e_max = 4 PeV: top half decade of the electron spectrum."""
+    kw = dict(esn_51=1.0, mej=8.0, n_ism=0.1, braking_index=3.0, tau_sd=700.0,
+              age=950.0, e0_37=300.0, vel_psr=0.0, eta_g=0.0, eta_b=0.05,
+              e_min=1.0, e_max=4e6, e_break=500.0, p1=1.5, p2=2.4,
+              n_ic=0, ic_temps=[], ic_norms=[], dyn_step=1, elec_step=-1,
+              phot_step=-1, snapshot_mode='instantaneous')
+    err, _, e = _native_vs_limit(kw)
+    top = (e > 1.26e6) & (e < 4e6)
+    off, on = err(lambda r: r.electron_spectrum[top].sum())
+    assert off > 1.0, off
+    assert abs(on) < 0.1, on
 
 
 @pytest.mark.slow
