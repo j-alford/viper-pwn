@@ -799,35 +799,100 @@ def _fill_target_field(target_grid, n_ic_target, n_ic, ic_temps, ic_norms):
     target_grid.update_log_number()
 
 
-def _inject_shifted(grid, scratch, pl_e, mx_e, f_ad, inject_cont, kT_max,
-                    remap):
-    """Deposit the step's injection with energies scaled by f_ad; returns
-    the energy placed on the grid [1e40 erg]."""
-    dep, tmp = scratch
+@njit(cache=True, error_model='numpy')
+def _aged_intervals(e_lo, e_hi, c_lo, c_hi, num, slopes, old_rad, new_rad,
+                    vel, cool, tau, gev_per_erg):
+    """Mapped intervals of each injection bin at dyadic ages within the
+    step, deeper where the step outlasts the cooling time."""
+    n = num.shape[0]
+    depth = np.empty(n, np.int64)
+    tot = 0
+    for i in range(n):
+        x = c_hi[i] * e_hi[i] / gev_per_erg * tau
+        d = 1 + int(np.ceil(np.log2(1.0 + 4.0 * x)))
+        depth[i] = min(max(d, 1), 10)
+        tot += depth[i]
+    new_lo = np.empty(tot)
+    new_hi = np.empty(tot)
+    vals = np.empty(tot)
+    sl = np.empty(tot)
+    q = 0
+    for i in range(n):
+        for lvl in range(depth[i]):
+            if lvl == depth[i] - 1:
+                phi = 0.5 ** depth[i]
+                w = 0.5 ** lvl
+            else:
+                phi = 0.75 * 0.5 ** lvl
+                w = 0.5 ** (lvl + 1)
+            r0 = new_rad - phi * (new_rad - old_rad)
+            # 1/(E' R') = 1/(E R) + c |ln(R'/R)| / |v|
+            k = abs(np.log(new_rad / r0) / vel) / gev_per_erg if cool else 0.0
+            f = r0 / new_rad
+            new_lo[q] = f * e_lo[i] / (1.0 + c_lo[i] * e_lo[i] * r0 * k)
+            new_hi[q] = f * e_hi[i] / (1.0 + c_hi[i] * e_hi[i] * r0 * k)
+            vals[q] = w * num[i]
+            sl[q] = slopes[i]
+            q += 1
+    return new_lo, new_hi, vals, sl
+
+
+def _inject_aged(grid, scratch, pl_e, mx_e, inject_cont, kT_max, bpwn,
+                 old_rad, new_rad, vel, nelec_40, min_ic_bin, pow_ic,
+                 remap, threshold_bin):
+    """Deposit the step's injection with ages spread over the step;
+    returns the energy placed on the grid [1e40 erg]."""
+    dep, tmp, cache = scratch
     dep.reset_number(0.0)
     tmp.reset_number(0.0)
     if pl_e > 0.0:
         inject_cont(dep, pl_e)
     if mx_e > 0.0:
         inject_maxwellian(dep, mx_e, kT_max)
-    occ = dep.number > 0
-    if not np.any(occ):
+    idx = np.flatnonzero(dep.number > 0)
+    if idx.size == 0:
         return 0.0
-    new_min = f_ad * dep.bin_min
-    new_max = f_ad * dep.bin_max
-    if HAS_NUMBA:
-        if remap == 'powerlaw':
+    sl = slice(idx[0], idx[-1] + 1)
+    e_lo, e_hi = dep.bin_min[sl], dep.bin_max[sl]
+    num = dep.number[sl]
+
+    # loss coefficients, as in evolve_spectrum
+    log_old_rad = np.log10(old_rad)
+    if threshold_bin == 'centre':
+        c_lo = csynch_calc_vec(dep.log_avg[sl], bpwn, nelec_40, log_old_rad)
+        c_hi = c_lo
+    else:
+        c_lo = csynch_calc_vec(dep.log_min[sl], bpwn, nelec_40, log_old_rad)
+        c_hi = csynch_calc_vec(dep.log_max[sl], bpwn, nelec_40, log_old_rad)
+    p_ic = pow_ic[sl]
+    ic = (np.arange(sl.start, sl.stop) >= min_ic_bin) & (p_ic > 0)
+    cic = np.where(ic, p_ic / (dep.bin_avg[sl] / C.GeV_per_erg) ** 2, 0.0)
+    c_lo = c_lo + cic
+    c_hi = c_hi + cic
+
+    cool = vel != 0.0 and (new_rad - old_rad) * vel > 0.0
+    tau = abs(old_rad * np.log(new_rad / old_rad) / vel) if cool else 0.0
+    # injection shape is fixed over a run
+    if 'slopes' not in cache:
+        cache['slopes'] = local_slopes(dep)
+    fn = (_aged_intervals if HAS_NUMBA
+          else getattr(_aged_intervals, 'py_func', _aged_intervals))
+    new_lo, new_hi, vals, slopes = fn(
+        e_lo, e_hi, c_lo, c_hi, num, cache['slopes'][sl], old_rad, new_rad,
+        vel, cool, tau, C.GeV_per_erg)
+    occ = vals > 0
+    if remap == 'powerlaw':
+        if HAS_NUMBA:
             _place_in_bins_powerlaw_kernel(
-                new_min, new_max, dep.number, local_slopes(dep), occ,
+                new_lo, new_hi, vals, slopes, occ,
                 tmp.bin_min, tmp.bin_max, tmp.number)
         else:
-            _place_in_bins_kernel(new_min, new_max, dep.number, occ,
-                                  tmp.bin_min, tmp.bin_max, tmp.number)
-    elif remap == 'powerlaw':
-        place_in_bins_powerlaw(new_min, new_max, dep.number,
-                               local_slopes(dep), occ, tmp)
+            place_in_bins_powerlaw(new_lo, new_hi, vals, slopes, occ, tmp)
+    elif HAS_NUMBA:
+        _place_in_bins_kernel(new_lo, new_hi, vals, occ,
+                              tmp.bin_min, tmp.bin_max, tmp.number)
     else:
-        place_in_bins_batch(new_min, new_max, dep.number, occ, tmp)
+        place_in_bins_batch(new_lo, new_hi, vals, occ, tmp)
     grid.number += tmp.number
     grid.update_log_number()
     return float(np.sum(tmp.number * tmp.bin_avg)) / C.GeV_per_erg
@@ -1274,6 +1339,7 @@ def evolve_pwn(
     remap: str = 'uniform',
     threshold_bin: str = 'edges',
     ic_cooling: str = 'table',
+    cooling_field: str = 'start',
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1408,8 +1474,9 @@ def evolve_pwn(
     injection_credit : str
         'end' (default): the step's injected particles and magnetic
         energy enter at the end of the step at full energy. 'midstep':
-        both are credited with the mean adiabatic factor over the step,
-        (1 + R_old/R_new)/2.
+        the particles are injected throughout the step and cool for the
+        time left in it; the magnetic energy gets the mean adiabatic
+        factor (1 + R_old/R_new)/2.
     remap : str
         In-bin density used when a cooled bin is redistributed:
         'uniform' (default) or 'powerlaw' (local slope).
@@ -1419,7 +1486,10 @@ def evolve_pwn(
     ic_cooling : str
         IC loss rate per electron: 'table' (default, sum of the emission
         table over the photon grid) or 'exact' (blackbody closed form).
-    All four are forced to their defaults under cpp_compat.
+    cooling_field : str
+        Magnetic field in the step's cooling: 'start' (default, value at
+        the start of the step) or 'mean' (rms of start and end values).
+    All five are forced to their defaults under cpp_compat.
     """
     if cpp_compat:
         integration = 'euler'
@@ -1436,6 +1506,7 @@ def evolve_pwn(
         remap = 'uniform'
         threshold_bin = 'edges'
         ic_cooling = 'table'
+        cooling_field = 'start'
         if C.CONSTANTS_SOURCE != 'gsz2009':
             logger.warning(
                 "cpp_compat=True but constants are '%s', not 'gsz2009'. "
@@ -1488,6 +1559,7 @@ def evolve_pwn(
             f"got {synch_kernel!r}"
         )
     for _name, _val, _ok in (('injection_credit', injection_credit, ('end', 'midstep')),
+                             ('cooling_field', cooling_field, ('start', 'mean')),
                              ('remap', remap, ('uniform', 'powerlaw')),
                              ('threshold_bin', threshold_bin, ('edges', 'centre')),
                              ('ic_cooling', ic_cooling, ('table', 'exact'))):
@@ -1770,7 +1842,7 @@ def evolve_pwn(
     )
 
     _es_scratch = (np.empty(ne), np.empty(ne), np.empty(ne), np.empty(ne))
-    _dep_scratch = (elec_grid.copy(), elec_grid.copy())
+    _dep_scratch = (elec_grid.copy(), elec_grid.copy(), {})
 
     # --- Main loop ---
     while time < tmax:
@@ -1869,11 +1941,16 @@ def evolve_pwn(
 
         # midstep: mean adiabatic factor over the step
         f_ad = (0.5 * (1.0 + old_rad_pwn / rad_pwn)
-                if injection_credit == 'midstep' else 1.0)
+                if injection_credit != 'end' else 1.0)
 
         # Evolve particles
+        bpwn_cool = bpwn
+        if cooling_field == 'mean':
+            _b_new = bpwn_calc(epwnmag_40 * old_rad_pwn / rad_pwn
+                               + eta_b * depsr_40 * f_ad, log_vol_pwn)
+            bpwn_cool = np.sqrt(0.5 * (bpwn ** 2 + _b_new ** 2))
         epwnkin_40, rad_loss_40 = evolve_spectrum(
-            old_elec, elec_grid, bpwn, old_rad_pwn, rad_pwn,
+            old_elec, elec_grid, bpwn_cool, old_rad_pwn, rad_pwn,
             vel_pwn, nelec_40, min_ic_bin_step, pow_ic_elec_step,
             scratch=_es_scratch, remap=remap, threshold_bin=threshold_bin,
         )
@@ -1901,8 +1978,10 @@ def evolve_pwn(
         _last_pl_e = pl_e
         _last_mx_e = mx_e
         if injection_credit == 'midstep':
-            inj_e = _inject_shifted(elec_grid, _dep_scratch, pl_e, mx_e,
-                                    f_ad, _inject_continuous, kT_max, remap)
+            inj_e = _inject_aged(
+                elec_grid, _dep_scratch, pl_e, mx_e, _inject_continuous,
+                kT_max, bpwn_cool, old_rad_pwn, rad_pwn, vel_pwn, nelec_40,
+                min_ic_bin_step, pow_ic_elec_step, remap, threshold_bin)
         else:
             if pl_e > 0.0:
                 _inject_continuous(elec_grid, pl_e)
@@ -1964,7 +2043,7 @@ def evolve_pwn(
                     np.log10(4.0 / 3.0 * np.pi)
                     + 3.0 * np.log10(rad_pwn)
                 )
-                if injection_credit == 'midstep':
+                if injection_credit != 'end':
                     f_ad = 0.5 * (1.0 + old_rad_pwn / rad_pwn)
                 epwnmag_40 = (
                     epwnmag_40_pre * old_rad_pwn / rad_pwn

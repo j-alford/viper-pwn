@@ -118,6 +118,7 @@ class _FitSpec:
     remap: str = 'uniform'
     threshold_bin: str = 'edges'
     ic_cooling: str = 'table'
+    cooling_field: str = 'start'
     known_age: float | None = None
     age_bounds: tuple[float, float] | None = None
 
@@ -206,6 +207,7 @@ def _build_fit_spec(model, observables: list[Observable],
         remap=getattr(model, 'remap', 'uniform'),
         threshold_bin=getattr(model, 'threshold_bin', 'edges'),
         ic_cooling=getattr(model, 'ic_cooling', 'table'),
+        cooling_field=getattr(model, 'cooling_field', 'start'),
         known_age=known_age,
         age_bounds=getattr(model, 'age_bounds', None),
     )
@@ -288,6 +290,7 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         remap=spec.remap,
         threshold_bin=spec.threshold_bin,
         ic_cooling=spec.ic_cooling,
+        cooling_field=spec.cooling_field,
     )
 
 

@@ -70,6 +70,7 @@ OPTION_DEFAULTS = {
     'remap': 'uniform',
     'threshold_bin': 'edges',
     'ic_cooling': 'table',
+    'cooling_field': 'start',
 }
 
 FIT_DEFAULTS = {

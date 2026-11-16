@@ -134,6 +134,7 @@ class PWNModel:
         self.remap: str = 'uniform'
         self.threshold_bin: str = 'edges'
         self.ic_cooling: str = 'table'
+        self.cooling_field: str = 'start'
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
         # Allowed age range [yr] with tau_sd and the braking index both
@@ -508,7 +509,8 @@ class PWNModel:
         for name, ok in (('injection_credit', ('end', 'midstep')),
                          ('remap', ('uniform', 'powerlaw')),
                          ('threshold_bin', ('edges', 'centre')),
-                         ('ic_cooling', ('table', 'exact'))):
+                         ('ic_cooling', ('table', 'exact')),
+                         ('cooling_field', ('start', 'mean'))):
             val = run_cfg.get(name, ok[0])
             if val not in ok:
                 raise ValueError(f"{name} must be one of {ok}, got {val!r}")
@@ -653,6 +655,7 @@ class PWNModel:
             remap=getattr(self, 'remap', 'uniform'),
             threshold_bin=getattr(self, 'threshold_bin', 'edges'),
             ic_cooling=getattr(self, 'ic_cooling', 'table'),
+            cooling_field=getattr(self, 'cooling_field', 'start'),
         )
         return self._result
 
