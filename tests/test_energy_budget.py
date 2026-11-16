@@ -11,6 +11,8 @@ from viper.grids import make_log_grid
 from viper.radiation import csynch_calc_vec
 from viper.scalar_params import PWNScalarParams
 
+from _analytic import ORIGINAL_SCHEME
+
 ROOT = Path(__file__).resolve().parents[1]
 GRID_JSON = ROOT / 'tests' / 'reference' / 'grid' / 'grid.json'
 
@@ -43,7 +45,7 @@ def _budget_run(monkeypatch, name, integration):
         e0_37=float(p.e0_37), vel_psr=0.0, eta_g=0.0, eta_b=p.eta_b,
         e_min=p.e_min, e_max=p.e_max, e_break=p.e_break, p1=p.p1, p2=p.p2,
         n_ic=0, ic_temps=[], ic_norms=[], dyn_step=1, elec_step=-1,
-        phot_step=-1, snapshot_mode='instantaneous')
+        phot_step=-1, snapshot_mode='instantaneous', **ORIGINAL_SCHEME)
     rows = list(r.dyninfo)
     t = np.array([x.time for x in rows])
     keep = np.ones(len(t), bool)

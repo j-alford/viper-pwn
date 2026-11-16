@@ -1,4 +1,4 @@
-"""Numerical corrections, off by default: each removes a known error."""
+"""Numerical corrections: each removes a known error of the original scheme."""
 import numpy as np
 import pytest
 
@@ -13,7 +13,8 @@ from viper.model import PWNModel
 from viper.fitting import build_fit_spec
 from viper.source import OPTION_DEFAULTS
 
-from _analytic import (CoolingHarness, band_ratio, powerlaw_norm,
+from _analytic import (ORIGINAL_SCHEME, CoolingHarness, band_ratio,
+                       powerlaw_norm,
                        steady_state_counts, synch_b_coeff)
 
 ALL_ON = dict(injection_credit='midstep', remap='powerlaw',
@@ -26,11 +27,10 @@ E_LO, E_HI, P = 10.0, 1e5, 2.3
 # --- defaults and validation ---------------------------------------------------
 
 def test_option_defaults():
-    for k in ALL_ON:
-        assert OPTION_DEFAULTS[k] in ('end', 'uniform', 'edges', 'table', 'start')
     m = PWNModel()
-    assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling,
-            m.cooling_field) == ('end', 'uniform', 'edges', 'table', 'start')
+    for k, v in ALL_ON.items():
+        assert OPTION_DEFAULTS[k] == v
+        assert getattr(m, k) == v
 
 
 @pytest.mark.parametrize('name,bad', [('injection_credit', 'half'),
@@ -50,15 +50,15 @@ def test_rejects_unknown_value(name, bad):
 
 def test_model_and_fit_spec_carry_options():
     m = PWNModel()
-    m.apply_run_config(dict(ALL_ON))
+    m.apply_run_config(dict(ORIGINAL_SCHEME))
     assert (m.injection_credit, m.remap, m.threshold_bin, m.ic_cooling,
-            m.cooling_field) == ('midstep', 'powerlaw', 'centre', 'exact', 'mean')
+            m.cooling_field) == ('end', 'uniform', 'edges', 'table', 'start')
     m.eta_b.frozen = False
     m.eta_b.bounds = (1e-4, 0.5)
     spec = build_fit_spec(m, [])
     assert (spec.injection_credit, spec.remap, spec.threshold_bin,
             spec.ic_cooling, spec.cooling_field) == (
-        'midstep', 'powerlaw', 'centre', 'exact', 'mean')
+        'end', 'uniform', 'edges', 'table', 'start')
 
 
 # --- spectral update: numpy and numba paths agree --------------------------------
@@ -200,7 +200,8 @@ def _native_vs_limit(kw, ks=(8, 16)):
     """Native-timestep result over its Richardson limit, minus one."""
     from test_order_of_convergence import _functionals
     from _analytic import refine_dts
-    base = evolve_pwn(integration='euler', **kw)
+    kw = {k: v for k, v in kw.items() if k not in ALL_ON}
+    base = evolve_pwn(integration='euler', **kw, **ORIGINAL_SCHEME)
     dts = [float(x.delta_t) for x in base.dyninfo][:-1]
     ref = [evolve_pwn(integration='euler', **kw, **ALL_ON,
                       replay_dt_sequence=refine_dts(dts, k)) for k in ks]
@@ -243,7 +244,7 @@ def test_injection_above_a_pev_is_cooled_within_the_step():
 
 @pytest.mark.slow
 def test_all_options_run_and_conserve_number():
-    r0 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5))
+    r0 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5), **ORIGINAL_SCHEME)
     r1 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5), **ALL_ON)
     assert r1.dyninfo[-1].rad_pwn == pytest.approx(r0.dyninfo[-1].rad_pwn,
                                                    rel=3e-2)

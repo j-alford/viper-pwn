@@ -6,6 +6,8 @@ import viper.constants as C
 from viper import snr
 from viper.evolution import evolve_pwn
 
+from _analytic import ORIGINAL_SCHEME
+
 pytestmark = pytest.mark.slow
 
 ESN, MEJ = 1.0, 8.0
@@ -29,7 +31,7 @@ def _kw(n_ism, nb):
                 eta_b=ETA_B, e_min=10.0, e_max=1.0e3, e_break=100.0, p1=1.5,
                 p2=2.5, n_ic=0, ic_temps=[], ic_norms=[], dyn_step=1,
                 elec_step=-1, phot_step=-1, snapshot_mode='instantaneous',
-                n_elec_bins=nb)
+                n_elec_bins=nb, **ORIGINAL_SCHEME)
 
 
 def _rows(result):

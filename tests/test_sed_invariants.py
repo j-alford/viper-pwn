@@ -87,12 +87,10 @@ def _crab_like_kwargs():
     )
 
 
-def test_resolve_final_cooling_matches_refined_timesteps():
-    """With resolve_final_cooling the final spectrum agrees with a run
-    whose last steps are subdivided ten-fold; without it the synchrotron
-    cutoff region is off by tens of percent."""
+def _cutoff_error(**options):
+    """Worst nuFnu error at 10 keV - 150 MeV against refined last steps."""
     from viper.evolution import evolve_pwn
-    kw = _crab_like_kwargs()
+    kw = dict(_crab_like_kwargs(), **options)
     default = evolve_pwn(dyn_step=1, **kw)
     dts = [d.delta_t for d in default.dyninfo][:-1]
     seq = dts[:-100] + [d / 50 for d in dts[-100:] for _ in range(50)]
@@ -101,7 +99,23 @@ def test_resolve_final_cooling_matches_refined_timesteps():
     e_eV = default.photon_freqs * C.h_eV
     nufnu = lambda r: r.photon_spectrum * r.photon_freqs
     band = (e_eV > 1e4) & (e_eV < 1.5e8)
-    worst_default = np.max(np.abs(nufnu(default)[band] / nufnu(reference)[band] - 1))
-    worst_resolved = np.max(np.abs(nufnu(resolved)[band] / nufnu(reference)[band] - 1))
+    worst = lambda r: np.max(np.abs(nufnu(r)[band] / nufnu(reference)[band] - 1))
+    return worst(default), worst(resolved)
+
+
+def test_synchrotron_cutoff_is_resolved_at_the_default_timestep():
+    """Crab-like source: the final spectrum agrees with a run whose last
+    steps are subdivided, with or without resolve_final_cooling."""
+    worst_default, worst_resolved = _cutoff_error()
+    assert worst_default < 0.06
+    assert worst_resolved < 0.06
+
+
+def test_resolve_final_cooling_matches_refined_timesteps():
+    """Original scheme: the cutoff region is off by tens of percent unless
+    resolve_final_cooling is on."""
+    worst_default, worst_resolved = _cutoff_error(
+        injection_credit='end', remap='uniform', threshold_bin='edges',
+        ic_cooling='table', cooling_field='start', snapshot_mode='secant')
     assert worst_default > 0.10
     assert worst_resolved < 0.06

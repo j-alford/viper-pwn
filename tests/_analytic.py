@@ -288,3 +288,9 @@ def pair_orders(values):
     d = np.abs(np.diff(v))
     with np.errstate(divide='ignore', invalid='ignore'):
         return np.log2(d[:-1] / d[1:])
+
+
+# evolve_pwn options of the original first-order scheme
+ORIGINAL_SCHEME = dict(injection_credit='end', remap='uniform',
+                       threshold_bin='edges', ic_cooling='table',
+                       cooling_field='start')

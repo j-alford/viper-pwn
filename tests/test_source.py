@@ -98,7 +98,7 @@ def test_defaults(tmp_path):
     assert settings['NESTED']['nlive'] == 800
     assert spec.integration == 'pc_full'
     assert spec.use_cmb_lookup is True
-    assert spec.snapshot_mode == 'secant'
+    assert spec.snapshot_mode == 'instantaneous'
 
 
 def test_options_and_fit_blocks(tmp_path):

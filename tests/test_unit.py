@@ -951,7 +951,7 @@ def test_fit_spec_stepping_options():
     m.parameters['p1'].bounds = (1.0, 3.0)
     spec = build_fit_spec(m, [])
     assert spec.timestep_events is False
-    assert spec.snapshot_mode == 'secant'
+    assert spec.snapshot_mode == 'instantaneous'
     assert spec.event_dt_floor_yr == 0.5
 
     theta = np.array([np.log10(spec.all_values[fp.name]) if fp.log
@@ -959,7 +959,7 @@ def test_fit_spec_stepping_options():
                       for fp in spec.free_params])
     kw = _theta_to_evolve_args(theta, spec)
     assert kw['timestep_events'] is False
-    assert kw['snapshot_mode'] == 'secant'
+    assert kw['snapshot_mode'] == 'instantaneous'
     assert kw['event_dt_floor_yr'] == 0.5
 
     m2 = PWNModel()

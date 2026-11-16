@@ -9,7 +9,8 @@ import viper.constants as C
 from viper.evolution import evolve_pwn
 from viper.scalar_params import PWNScalarParams
 
-from _analytic import loguniform_dts, pair_orders, refine_dts
+from _analytic import (ORIGINAL_SCHEME, loguniform_dts, pair_orders,
+                       refine_dts)
 
 pytestmark = pytest.mark.slow
 
@@ -33,7 +34,7 @@ def _base_kw():
                 e_break=p.e_break, p1=p.p1, p2=p.p2, f_max=0.0, kT_max=0.0,
                 n_ic=p.n_ic, ic_temps=p.ic_temps, ic_norms=p.ic_norms,
                 dyn_step=1, elec_step=-1, phot_step=-1,
-                snapshot_mode='instantaneous')
+                snapshot_mode='instantaneous', **ORIGINAL_SCHEME)
 
 
 BASE = _base_kw()

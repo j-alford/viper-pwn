@@ -9,6 +9,8 @@ import viper.constants as C
 from viper.evolution import evolve_pwn
 from viper.scalar_params import PWNScalarParams
 
+from _analytic import ORIGINAL_SCHEME
+
 pytestmark = pytest.mark.slow
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,9 +56,11 @@ def runner():
     """Memoized evolve_pwn runner shared across the suite."""
     cache = {}
 
-    def _run(point=None, integration='euler', overrides=None, age=None):
+    def _run(point=None, integration='euler', overrides=None, age=None,
+             scheme=None):
         key = (point, integration,
-               json.dumps(overrides or {}, sort_keys=True), age)
+               json.dumps(overrides or {}, sort_keys=True), age,
+               json.dumps(scheme or {}, sort_keys=True))
         if key not in cache:
             params = _params(point, overrides)
             t_age = age if age is not None else float(params.true_age)
@@ -74,6 +78,7 @@ def runner():
                 n_ic=params.n_ic, ic_temps=params.ic_temps,
                 ic_norms=params.ic_norms,
                 dyn_step=1, elec_step=-1, phot_step=-1,
+                **(scheme or {}),
             )
             cache[key] = (params, r)
         return cache[key]
@@ -120,8 +125,8 @@ def _logslope(t, y, lo, hi):
 @pytest.mark.parametrize('integration', INTEGRATORS)
 @pytest.mark.parametrize('point', POINTS)
 def test_magnetic_energy_identity(runner, point, integration):
-    """epwnb[i+1] == epwnb[i]·r[i]/r[i+1] + eta_b·ΔE_sd, every step."""
-    params, r = runner(point, integration)
+    """epwnb[i+1] == epwnb[i]·r[i]/r[i+1] + eta_b·ΔE_sd, every step (end-of-step injection)."""
+    params, r = runner(point, integration, scheme=ORIGINAL_SCHEME)
     s = _series(r)
     de = _depsr_steps(params, s['t'], s['dt'])[1:]
     pred = (s['epwnb'][:-1] * s['r'][:-1] / s['r'][1:]
@@ -149,7 +154,8 @@ def _particle_gap(params, s, eta_b):
                                              ('pc_full', 3e-2)])
 def test_particle_budget_pre_collision(runner, integration, tol):
     """Electron-spectrum energy follows adiabatic+injection (radiation-negligible)."""
-    params, r = runner('g54_baseline', integration, overrides=RADLESS)
+    params, r = runner('g54_baseline', integration, overrides=RADLESS,
+                       scheme=ORIGINAL_SCHEME)
     s = _series(r)
     gap = _particle_gap(params, s, RADLESS['eta_b'])
     assert gap < tol, f'particle budget gap {gap:.3e} > {tol:g}'
