@@ -58,7 +58,7 @@ OPTION_DEFAULTS = {
     'use_cmb_lookup': True,
     'use_field_lookup': False,
     'timestep_events': False,
-    'snapshot_mode': 'secant',
+    'snapshot_mode': 'instantaneous',
     'event_dt_floor_yr': 0.5,
     'timestep_cooling': 'compat',
     'resolve_final_cooling': False,
@@ -66,11 +66,11 @@ OPTION_DEFAULTS = {
     'injection_model': 'broken_powerlaw',
     'ssc_model': 'off',
     'synch_kernel': 'isotropic',
-    'injection_credit': 'end',
-    'remap': 'uniform',
-    'threshold_bin': 'edges',
-    'ic_cooling': 'table',
-    'cooling_field': 'start',
+    'injection_credit': 'midstep',
+    'remap': 'powerlaw',
+    'threshold_bin': 'centre',
+    'ic_cooling': 'exact',
+    'cooling_field': 'mean',
 }
 
 FIT_DEFAULTS = {

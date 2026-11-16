@@ -713,10 +713,12 @@ def local_slopes(grid):
 
 
 @njit(cache=True, error_model='numpy')
-def _pl_cdf(e, s):
-    if abs(s - 1.0) < 1e-9:
-        return np.log(e)
-    return e ** (1.0 - s) / (1.0 - s)
+def _pl_int(a, b, s):
+    """Integral of E^-s over [a, b], no cancellation."""
+    lg = np.log(b / a)
+    u = (1.0 - s) * lg
+    g = np.expm1(u) / u if abs(u) > 1e-8 else 1.0 + 0.5 * u
+    return a ** (1.0 - s) * lg * g
 
 
 @njit(cache=True, error_model='numpy')
@@ -750,24 +752,27 @@ def _place_in_bins_powerlaw_kernel(new_mins, new_maxs, values, slopes,
         s = slopes[k]
         if nm <= 0.0:
             s = 0.0
-        total = _pl_cdf(nx, s) - _pl_cdf(nm, s)
+        total = _pl_int(nm, nx, s) if nm > 0.0 else nx - nm
         if not (total > 0.0) or not np.isfinite(total):
             s = 0.0
             total = nx - nm
         acc = 0.0
+        last = lo
         for i in range(lo, hi + 1):
             a = nm if nm > grid_bin_min[i] else grid_bin_min[i]
             b = nx if nx < grid_bin_max[i] else grid_bin_max[i]
             if b <= a:
                 continue
-            frac = (_pl_cdf(b, s) - _pl_cdf(a, s)) / total
+            frac = (_pl_int(a, b, s) if nm > 0.0 else b - a) / total
             if frac > 0.0:
                 if frac > 1.0:
                     frac = 1.0
                 number[i] += frac * v
                 acc += frac
+                last = i
+        # rounding remainder stays in an occupied bin
         if acc < 1.0:
-            number[hi] += (1.0 - acc) * v
+            number[last] += (1.0 - acc) * v
 
 
 # === Fill target photon field ===
@@ -1325,7 +1330,7 @@ def evolve_pwn(
     replay_dt_sequence: Optional[Sequence[float]] = None,
     timestep_events: bool = False,
     event_dt_floor_yr: float = 0.5,
-    snapshot_mode: str = 'secant',
+    snapshot_mode: str = 'instantaneous',
     timestep_cooling: str = 'compat',
     resolve_final_cooling: bool = False,
     escape_model: str = 'off',
@@ -1335,11 +1340,11 @@ def evolve_pwn(
     ssc_model: str = 'off',
     snapshot_injection: str = 'included',
     synch_kernel: str = DEFAULT_SYNCH_KERNEL,
-    injection_credit: str = 'end',
-    remap: str = 'uniform',
-    threshold_bin: str = 'edges',
-    ic_cooling: str = 'table',
-    cooling_field: str = 'start',
+    injection_credit: str = 'midstep',
+    remap: str = 'powerlaw',
+    threshold_bin: str = 'centre',
+    ic_cooling: str = 'exact',
+    cooling_field: str = 'mean',
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1440,9 +1445,9 @@ def evolve_pwn(
         0.5 yr floor, so the final spectrum resolves electrons that
         cool faster than a step.  Forced False under cpp_compat.
     snapshot_mode : str
-        'secant' (default; last-step average, flux deficit linear in
-        the final dt) or 'instantaneous' (the titer->0 limit). Forced
-        'secant' under cpp_compat.
+        'instantaneous' (default; each bin emits at its instantaneous
+        rate) or 'secant' (last-step average, flux deficit linear in
+        the final dt). Forced 'secant' under cpp_compat.
     escape_model : str
         One-zone escape sink (escape.py registry): 'off' (default,
         exact no-op), 'powerlaw'/'diffusion' (use esc_index),
@@ -1472,24 +1477,24 @@ def evolve_pwn(
         Synchrotron emission kernel: 'isotropic' (default), 'rms_pitch'
         or 'legacy' (forced under cpp_compat). Emission only, not cooling.
     injection_credit : str
-        'end' (default): the step's injected particles and magnetic
-        energy enter at the end of the step at full energy. 'midstep':
-        the particles are injected throughout the step and cool for the
-        time left in it; the magnetic energy gets the mean adiabatic
-        factor (1 + R_old/R_new)/2.
+        'midstep' (default): the step's particles are injected throughout
+        the step and cool for the time left in it; the magnetic energy
+        gets the mean adiabatic factor (1 + R_old/R_new)/2. 'end': both
+        enter at the end of the step at full energy.
     remap : str
         In-bin density used when a cooled bin is redistributed:
-        'uniform' (default) or 'powerlaw' (local slope).
+        'powerlaw' (default, local slope) or 'uniform'.
     threshold_bin : str
-        Synchrotron self-absorption switch evaluated at both bin
-        'edges' (default) or once at the bin 'centre'.
+        Synchrotron self-absorption switch evaluated once at the bin
+        'centre' (default) or at both bin 'edges'.
     ic_cooling : str
-        IC loss rate per electron: 'table' (default, sum of the emission
-        table over the photon grid) or 'exact' (blackbody closed form).
+        IC loss rate per electron: 'exact' (default, blackbody closed
+        form) or 'table' (sum of the emission table over the photon grid).
     cooling_field : str
-        Magnetic field in the step's cooling: 'start' (default, value at
-        the start of the step) or 'mean' (rms of start and end values).
-    All five are forced to their defaults under cpp_compat.
+        Magnetic field in the step's cooling: 'mean' (default, rms of the
+        start and end values) or 'start'.
+    Under cpp_compat these five are forced to 'end', 'uniform', 'edges',
+    'table', 'start'.
     """
     if cpp_compat:
         integration = 'euler'

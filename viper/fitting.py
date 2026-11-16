@@ -101,7 +101,7 @@ class _FitSpec:
     use_field_lookup: bool = False
     # Stepping options
     timestep_events: bool = False
-    snapshot_mode: str = 'secant'
+    snapshot_mode: str = 'instantaneous'
     event_dt_floor_yr: float = 0.5
     timestep_cooling: str = 'compat'
     resolve_final_cooling: bool = False
@@ -114,11 +114,11 @@ class _FitSpec:
     # synchrotron emission kernel
     synch_kernel: str = DEFAULT_SYNCH_KERNEL
     # numerics corrections
-    injection_credit: str = 'end'
-    remap: str = 'uniform'
-    threshold_bin: str = 'edges'
-    ic_cooling: str = 'table'
-    cooling_field: str = 'start'
+    injection_credit: str = 'midstep'
+    remap: str = 'powerlaw'
+    threshold_bin: str = 'centre'
+    ic_cooling: str = 'exact'
+    cooling_field: str = 'mean'
     known_age: float | None = None
     age_bounds: tuple[float, float] | None = None
 
@@ -194,7 +194,7 @@ def _build_fit_spec(model, observables: list[Observable],
         use_cmb_lookup=getattr(model, 'use_cmb_lookup', False),
         use_field_lookup=bool(getattr(model, 'use_field_lookup', False)),
         timestep_events=bool(getattr(model, 'timestep_events', False)),
-        snapshot_mode=getattr(model, 'snapshot_mode', 'secant'),
+        snapshot_mode=getattr(model, 'snapshot_mode', 'instantaneous'),
         event_dt_floor_yr=float(getattr(model, 'event_dt_floor_yr', 0.5)),
         timestep_cooling=getattr(model, 'timestep_cooling', 'compat'),
         resolve_final_cooling=bool(getattr(model, 'resolve_final_cooling', False)),
@@ -203,11 +203,11 @@ def _build_fit_spec(model, observables: list[Observable],
                                 'broken_powerlaw'),
         ssc_model=getattr(model, 'ssc_model', 'off'),
         synch_kernel=getattr(model, 'synch_kernel', DEFAULT_SYNCH_KERNEL),
-        injection_credit=getattr(model, 'injection_credit', 'end'),
-        remap=getattr(model, 'remap', 'uniform'),
-        threshold_bin=getattr(model, 'threshold_bin', 'edges'),
-        ic_cooling=getattr(model, 'ic_cooling', 'table'),
-        cooling_field=getattr(model, 'cooling_field', 'start'),
+        injection_credit=getattr(model, 'injection_credit', 'midstep'),
+        remap=getattr(model, 'remap', 'powerlaw'),
+        threshold_bin=getattr(model, 'threshold_bin', 'centre'),
+        ic_cooling=getattr(model, 'ic_cooling', 'exact'),
+        cooling_field=getattr(model, 'cooling_field', 'mean'),
         known_age=known_age,
         age_bounds=getattr(model, 'age_bounds', None),
     )

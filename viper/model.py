@@ -130,11 +130,11 @@ class PWNModel:
         # synchrotron emission kernel
         self.synch_kernel: str = DEFAULT_SYNCH_KERNEL
         # numerics corrections, off by default
-        self.injection_credit: str = 'end'
-        self.remap: str = 'uniform'
-        self.threshold_bin: str = 'edges'
-        self.ic_cooling: str = 'table'
-        self.cooling_field: str = 'start'
+        self.injection_credit: str = 'midstep'
+        self.remap: str = 'powerlaw'
+        self.threshold_bin: str = 'centre'
+        self.ic_cooling: str = 'exact'
+        self.cooling_field: str = 'mean'
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
         # Allowed age range [yr] with tau_sd and the braking index both
@@ -445,14 +445,14 @@ class PWNModel:
         MUST be called BEFORE ``build_fit_spec``: the fit spec reads
         these from the model at build time.
 
-        Absent keys keep the defaults (secant snapshot, no event
+        Absent keys keep the defaults (instantaneous snapshot, no event
         stepper, compat cooling bound, escape off, lookup on).
         """
         from .escape import ESCAPE_MODELS
 
         # Stepping options
         self.timestep_events = bool(run_cfg.get('timestep_events', False))
-        self.snapshot_mode = run_cfg.get('snapshot_mode', 'secant')
+        self.snapshot_mode = run_cfg.get('snapshot_mode', 'instantaneous')
         self.event_dt_floor_yr = float(run_cfg.get('event_dt_floor_yr', 0.5))
         self.timestep_cooling = run_cfg.get('timestep_cooling', 'compat')
         self.resolve_final_cooling = bool(
@@ -506,11 +506,11 @@ class PWNModel:
             raise ValueError(
                 f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
                 f"got {self.synch_kernel!r}")
-        for name, ok in (('injection_credit', ('end', 'midstep')),
-                         ('remap', ('uniform', 'powerlaw')),
-                         ('threshold_bin', ('edges', 'centre')),
-                         ('ic_cooling', ('table', 'exact')),
-                         ('cooling_field', ('start', 'mean'))):
+        for name, ok in (('injection_credit', ('midstep', 'end')),
+                         ('remap', ('powerlaw', 'uniform')),
+                         ('threshold_bin', ('centre', 'edges')),
+                         ('ic_cooling', ('exact', 'table')),
+                         ('cooling_field', ('mean', 'start'))):
             val = run_cfg.get(name, ok[0])
             if val not in ok:
                 raise ValueError(f"{name} must be one of {ok}, got {val!r}")
@@ -651,11 +651,12 @@ class PWNModel:
             snapshot_injection=snapshot_injection,
             synch_kernel=self.synch_kernel,
             resolve_final_cooling=getattr(self, 'resolve_final_cooling', False),
-            injection_credit=getattr(self, 'injection_credit', 'end'),
-            remap=getattr(self, 'remap', 'uniform'),
-            threshold_bin=getattr(self, 'threshold_bin', 'edges'),
-            ic_cooling=getattr(self, 'ic_cooling', 'table'),
-            cooling_field=getattr(self, 'cooling_field', 'start'),
+            snapshot_mode=getattr(self, 'snapshot_mode', 'instantaneous'),
+            injection_credit=getattr(self, 'injection_credit', 'midstep'),
+            remap=getattr(self, 'remap', 'powerlaw'),
+            threshold_bin=getattr(self, 'threshold_bin', 'centre'),
+            ic_cooling=getattr(self, 'ic_cooling', 'exact'),
+            cooling_field=getattr(self, 'cooling_field', 'mean'),
         )
         return self._result
 

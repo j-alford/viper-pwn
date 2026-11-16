@@ -361,10 +361,12 @@ def integrate_electron_energy(grid: SpectralGrid) -> float:
     return np.sum(10.0**log_e)
 
 
-def _pl_cdf(e, s):
-    if abs(s - 1.0) < 1e-9:
-        return np.log(e)
-    return e ** (1.0 - s) / (1.0 - s)
+def _pl_int(a, b, s):
+    """Integral of E^-s over [a, b], no cancellation."""
+    lg = np.log(b / a)
+    u = (1.0 - s) * lg
+    g = np.expm1(u) / u if abs(u) > 1e-8 else 1.0 + 0.5 * u
+    return a ** (1.0 - s) * lg * g
 
 
 def place_in_bins_powerlaw(new_mins, new_maxs, values, slopes, occupied,
@@ -386,19 +388,21 @@ def place_in_bins_powerlaw(new_mins, new_maxs, values, slopes, occupied,
             number[lo] += v
             continue
         s = slopes[k] if nm > 0.0 else 0.0
-        total = _pl_cdf(nx, s) - _pl_cdf(nm, s)
+        total = _pl_int(nm, nx, s) if nm > 0.0 else nx - nm
         if not (total > 0.0) or not np.isfinite(total):
             s, total = 0.0, nx - nm
         acc = 0.0
+        last = lo
         for i in range(lo, hi + 1):
             a = max(nm, gmin[i])
             b = min(nx, gmax[i])
             if b <= a:
                 continue
-            frac = (_pl_cdf(b, s) - _pl_cdf(a, s)) / total
+            frac = (_pl_int(a, b, s) if nm > 0.0 else b - a) / total
             if frac > 0.0:
                 frac = min(frac, 1.0)
                 number[i] += frac * v
                 acc += frac
+                last = i
         if acc < 1.0:
-            number[hi] += (1.0 - acc) * v
+            number[last] += (1.0 - acc) * v
