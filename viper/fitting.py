@@ -113,6 +113,11 @@ class _FitSpec:
     ssc_model: str = 'off'
     # synchrotron emission kernel
     synch_kernel: str = DEFAULT_SYNCH_KERNEL
+    # numerics corrections
+    injection_credit: str = 'end'
+    remap: str = 'uniform'
+    threshold_bin: str = 'edges'
+    ic_cooling: str = 'table'
     known_age: float | None = None
     age_bounds: tuple[float, float] | None = None
 
@@ -197,6 +202,10 @@ def _build_fit_spec(model, observables: list[Observable],
                                 'broken_powerlaw'),
         ssc_model=getattr(model, 'ssc_model', 'off'),
         synch_kernel=getattr(model, 'synch_kernel', DEFAULT_SYNCH_KERNEL),
+        injection_credit=getattr(model, 'injection_credit', 'end'),
+        remap=getattr(model, 'remap', 'uniform'),
+        threshold_bin=getattr(model, 'threshold_bin', 'edges'),
+        ic_cooling=getattr(model, 'ic_cooling', 'table'),
         known_age=known_age,
         age_bounds=getattr(model, 'age_bounds', None),
     )
@@ -275,6 +284,10 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         injection_model=spec.injection_model,
         ssc_model=spec.ssc_model,
         synch_kernel=spec.synch_kernel,
+        injection_credit=spec.injection_credit,
+        remap=spec.remap,
+        threshold_bin=spec.threshold_bin,
+        ic_cooling=spec.ic_cooling,
     )
 
 

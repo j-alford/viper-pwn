@@ -66,6 +66,10 @@ OPTION_DEFAULTS = {
     'injection_model': 'broken_powerlaw',
     'ssc_model': 'off',
     'synch_kernel': 'isotropic',
+    'injection_credit': 'end',
+    'remap': 'uniform',
+    'threshold_bin': 'edges',
+    'ic_cooling': 'table',
 }
 
 FIT_DEFAULTS = {

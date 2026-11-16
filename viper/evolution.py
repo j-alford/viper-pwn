@@ -22,6 +22,7 @@ from .particles import (
     inject_broken_powerlaw,
     inject_maxwellian,
     place_in_bins_batch,
+    place_in_bins_powerlaw,
 )
 from .pulsar import initial_pwn_energy
 from .escape import ESCAPE_MODELS, escape_tau_seconds
@@ -228,6 +229,7 @@ def evolve_spectrum(
     bpwn: float, old_radius: float, new_radius: float, velocity: float,
     n_elec_40: float, min_ic_bin: int, pow_ic_elec: np.ndarray,
     scratch: Optional[tuple] = None,
+    remap: str = 'uniform', threshold_bin: str = 'edges',
 ) -> tuple[float, float]:
     """Evolve the electron spectrum by one timestep.
 
@@ -241,6 +243,7 @@ def evolve_spectrum(
         return _evolve_spectrum_numpy(
             old_grid, new_grid, bpwn, old_radius, new_radius, velocity,
             n_elec_40, min_ic_bin, pow_ic_elec, scratch=scratch,
+            remap=remap, threshold_bin=threshold_bin,
         )
 
     n_bins = old_grid.n_bins
@@ -285,6 +288,7 @@ def evolve_spectrum(
         C.log_erg, C.GeV_per_erg, C.log_two, C.log_3,
         _LOG_TAU_CONST, _LOG_1P1, _LOG_SYNCH_FREQ_OFFSET,
         new_e_min, new_e_max, energy_terms, rad_loss_terms,
+        threshold_bin == 'centre',
     )
 
     new_energy = np.sum(energy_terms)
@@ -295,9 +299,15 @@ def evolve_spectrum(
     batch_mask = occupied & has_particles
     overflow_mask = occupied & ~has_particles
 
-    _place_in_bins_kernel(new_e_min, new_e_max, old_grid.number,
-                          batch_mask, new_grid.bin_min, new_grid.bin_max,
-                          new_grid.number)
+    if remap == 'powerlaw':
+        _place_in_bins_powerlaw_kernel(
+            new_e_min, new_e_max, old_grid.number,
+            local_slopes(old_grid), batch_mask,
+            new_grid.bin_min, new_grid.bin_max, new_grid.number)
+    else:
+        _place_in_bins_kernel(new_e_min, new_e_max, old_grid.number,
+                              batch_mask, new_grid.bin_min, new_grid.bin_max,
+                              new_grid.number)
 
     # cooled to zero -> bin 0
     if np.any(overflow_mask):
@@ -312,6 +322,7 @@ def _evolve_spectrum_numpy(
     bpwn: float, old_radius: float, new_radius: float, velocity: float,
     n_elec_40: float, min_ic_bin: int, pow_ic_elec: np.ndarray,
     scratch: Optional[tuple] = None,
+    remap: str = 'uniform', threshold_bin: str = 'edges',
 ) -> tuple[float, float]:
     """Vectorized-numpy implementation of :func:`evolve_spectrum`.
 
@@ -327,8 +338,15 @@ def _evolve_spectrum_numpy(
     log_vel = np.log10(abs(velocity)) if velocity != 0 else -999999.0
 
     # --- Vectorized cooling coefficients for bin min and max edges ---
-    c_synch_min = csynch_calc_vec(old_grid.log_min, bpwn, n_elec_40, log_old_rad)
-    c_synch_max = csynch_calc_vec(old_grid.log_max, bpwn, n_elec_40, log_old_rad)
+    if threshold_bin == 'centre':
+        c_synch_min = csynch_calc_vec(old_grid.log_avg, bpwn, n_elec_40,
+                                      log_old_rad)
+        c_synch_max = c_synch_min
+    else:
+        c_synch_min = csynch_calc_vec(old_grid.log_min, bpwn, n_elec_40,
+                                      log_old_rad)
+        c_synch_max = csynch_calc_vec(old_grid.log_max, bpwn, n_elec_40,
+                                      log_old_rad)
 
     # Add IC cooling where applicable
     c_total_min = c_synch_min.copy()
@@ -412,7 +430,12 @@ def _evolve_spectrum_numpy(
     batch_mask = occupied & has_particles
     overflow_mask = occupied & ~has_particles
 
-    place_in_bins_batch(new_e_min, new_e_max, old_grid.number, batch_mask, new_grid)
+    if remap == 'powerlaw':
+        place_in_bins_powerlaw(new_e_min, new_e_max, old_grid.number,
+                               local_slopes(old_grid), batch_mask, new_grid)
+    else:
+        place_in_bins_batch(new_e_min, new_e_max, old_grid.number,
+                            batch_mask, new_grid)
 
     # cooled to zero -> bin 0
     if np.any(overflow_mask):
@@ -465,6 +488,7 @@ def _evolve_spectrum_kernel(
     c_log_erg, c_gev_per_erg, c_log_two, c_log_3,
     c_log_tau_const, c_log_1p1, c_synch_freq_offset,
     new_e_min, new_e_max, energy_terms, rad_loss_terms,
+    thr_centre,
 ):
     """Fused serial per-bin transcription of _evolve_spectrum_numpy.
 
@@ -476,7 +500,16 @@ def _evolve_spectrum_kernel(
         # --- cooling coefficient at each bin edge: csynch + IC ---
         c_min = 0.0
         c_max = 0.0
-        if bpwn_pos:
+        if bpwn_pos and thr_centre:
+            log_nu_crit = (c_synch_freq_offset + log_bpwn
+                           + 2.0 * (log_avg[i] - c_log_erg))
+            log_tau = (c_log_tau_const + 1.5 * log_bpwn
+                       - 2.5 * log_nu_crit + log_n_los + c_log_1p1
+                       + 0.75 * (c_log_two - c_log_3))
+            if log_tau < 0.0:
+                c_min = csynch_thin
+                c_max = csynch_thin
+        elif bpwn_pos:
             log_nu_crit = (c_synch_freq_offset + log_bpwn
                            + 2.0 * (log_min[i] - c_log_erg))
             log_tau = (c_log_tau_const + 1.5 * log_bpwn
@@ -657,6 +690,86 @@ def _place_in_bins_kernel(new_mins, new_maxs, values, batch_mask,
                         number[i] += frac * v
 
 
+def local_slopes(grid):
+    """Log-slope of the number density per bin, from occupied neighbours."""
+    n = grid.n_bins
+    dens = np.where(grid.number > 0, grid.number / grid.bin_width, 0.0)
+    ln_d = np.where(dens > 0, np.log(np.maximum(dens, 1e-300)), np.nan)
+    ln_e = np.log(np.maximum(grid.bin_avg, 1e-300))
+    s = np.zeros(n)
+    lo = np.concatenate(([np.nan], ln_d[:-1]))
+    hi = np.concatenate((ln_d[1:], [np.nan]))
+    e_lo = np.concatenate(([np.nan], ln_e[:-1]))
+    e_hi = np.concatenate((ln_e[1:], [np.nan]))
+    both = np.isfinite(lo) & np.isfinite(hi)
+    up = ~both & np.isfinite(hi) & np.isfinite(ln_d)
+    dn = ~both & np.isfinite(lo) & np.isfinite(ln_d)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        s = np.where(both, -(hi - lo) / (e_hi - e_lo), s)
+        s = np.where(up, -(hi - ln_d) / (e_hi - ln_e), s)
+        s = np.where(dn, -(ln_d - lo) / (ln_e - e_lo), s)
+    s[~np.isfinite(s)] = 0.0
+    return np.clip(s, -6.0, 10.0)
+
+
+@njit(cache=True, error_model='numpy')
+def _pl_cdf(e, s):
+    if abs(s - 1.0) < 1e-9:
+        return np.log(e)
+    return e ** (1.0 - s) / (1.0 - s)
+
+
+@njit(cache=True, error_model='numpy')
+def _place_in_bins_powerlaw_kernel(new_mins, new_maxs, values, slopes,
+                                   batch_mask, grid_bin_min, grid_bin_max,
+                                   number):
+    """Redistribute each mapped interval with density E^-s."""
+    n_bins = grid_bin_min.shape[0]
+    abs_max = grid_bin_max[n_bins - 1]
+    for k in range(new_mins.shape[0]):
+        if not batch_mask[k]:
+            continue
+        nm = new_mins[k]
+        nx = np.minimum(new_maxs[k], abs_max - 1.0)
+        if nx < nm:
+            t = nm
+            nm = nx
+            nx = t
+        v = values[k]
+        lo = np.searchsorted(grid_bin_max, nm, side='left')
+        if lo > n_bins - 1:
+            lo = n_bins - 1
+        hi = np.searchsorted(grid_bin_min, nx, side='right') - 1
+        if hi < 0:
+            hi = 0
+        if hi > n_bins - 1:
+            hi = n_bins - 1
+        if hi == lo or nx <= nm:
+            number[lo] += v
+            continue
+        s = slopes[k]
+        if nm <= 0.0:
+            s = 0.0
+        total = _pl_cdf(nx, s) - _pl_cdf(nm, s)
+        if not (total > 0.0) or not np.isfinite(total):
+            s = 0.0
+            total = nx - nm
+        acc = 0.0
+        for i in range(lo, hi + 1):
+            a = nm if nm > grid_bin_min[i] else grid_bin_min[i]
+            b = nx if nx < grid_bin_max[i] else grid_bin_max[i]
+            if b <= a:
+                continue
+            frac = (_pl_cdf(b, s) - _pl_cdf(a, s)) / total
+            if frac > 0.0:
+                if frac > 1.0:
+                    frac = 1.0
+                number[i] += frac * v
+                acc += frac
+        if acc < 1.0:
+            number[hi] += (1.0 - acc) * v
+
+
 # === Fill target photon field ===
 
 def _fill_target_field(target_grid, n_ic_target, n_ic, ic_temps, ic_norms):
@@ -684,6 +797,52 @@ def _fill_target_field(target_grid, n_ic_target, n_ic, ic_temps, ic_norms):
                     target_grid.bin_avg[i], T
                 )
     target_grid.update_log_number()
+
+
+def _inject_shifted(grid, scratch, pl_e, mx_e, f_ad, inject_cont, kT_max,
+                    remap):
+    """Deposit the step's injection with energies scaled by f_ad; returns
+    the energy placed on the grid [1e40 erg]."""
+    dep, tmp = scratch
+    dep.reset_number(0.0)
+    tmp.reset_number(0.0)
+    if pl_e > 0.0:
+        inject_cont(dep, pl_e)
+    if mx_e > 0.0:
+        inject_maxwellian(dep, mx_e, kT_max)
+    occ = dep.number > 0
+    if not np.any(occ):
+        return 0.0
+    new_min = f_ad * dep.bin_min
+    new_max = f_ad * dep.bin_max
+    if HAS_NUMBA:
+        if remap == 'powerlaw':
+            _place_in_bins_powerlaw_kernel(
+                new_min, new_max, dep.number, local_slopes(dep), occ,
+                tmp.bin_min, tmp.bin_max, tmp.number)
+        else:
+            _place_in_bins_kernel(new_min, new_max, dep.number, occ,
+                                  tmp.bin_min, tmp.bin_max, tmp.number)
+    elif remap == 'powerlaw':
+        place_in_bins_powerlaw(new_min, new_max, dep.number,
+                               local_slopes(dep), occ, tmp)
+    else:
+        place_in_bins_batch(new_min, new_max, dep.number, occ, tmp)
+    grid.number += tmp.number
+    grid.update_log_number()
+    return float(np.sum(tmp.number * tmp.bin_avg)) / C.GeV_per_erg
+
+
+def _exact_ic_loss(elec_grid, n_ic, ic_temps, ic_norms):
+    """Per-electron IC loss rate [erg/s] from the blackbody closed form."""
+    from .radiative import kernels as _k
+    e_erg = elec_grid.bin_avg / C.GeV_per_erg
+    out = np.asarray(_k.ic_loss_rate_blackbody(e_erg, C.T_CMB), float)
+    for j in range(n_ic):
+        t, u = ic_temps[j], ic_norms[j]
+        if t > 0.0 and u > 0.0:
+            out = out + _k.ic_loss_rate_blackbody(e_erg, t, u / C.eV_per_erg)
+    return out
 
 
 # === CMB IC lookup ===
@@ -1111,6 +1270,10 @@ def evolve_pwn(
     ssc_model: str = 'off',
     snapshot_injection: str = 'included',
     synch_kernel: str = DEFAULT_SYNCH_KERNEL,
+    injection_credit: str = 'end',
+    remap: str = 'uniform',
+    threshold_bin: str = 'edges',
+    ic_cooling: str = 'table',
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1242,6 +1405,21 @@ def evolve_pwn(
     synch_kernel : str
         Synchrotron emission kernel: 'isotropic' (default), 'rms_pitch'
         or 'legacy' (forced under cpp_compat). Emission only, not cooling.
+    injection_credit : str
+        'end' (default): the step's injected particles and magnetic
+        energy enter at the end of the step at full energy. 'midstep':
+        both are credited with the mean adiabatic factor over the step,
+        (1 + R_old/R_new)/2.
+    remap : str
+        In-bin density used when a cooled bin is redistributed:
+        'uniform' (default) or 'powerlaw' (local slope).
+    threshold_bin : str
+        Synchrotron self-absorption switch evaluated at both bin
+        'edges' (default) or once at the bin 'centre'.
+    ic_cooling : str
+        IC loss rate per electron: 'table' (default, sum of the emission
+        table over the photon grid) or 'exact' (blackbody closed form).
+    All four are forced to their defaults under cpp_compat.
     """
     if cpp_compat:
         integration = 'euler'
@@ -1254,6 +1432,10 @@ def evolve_pwn(
         injection_model = 'broken_powerlaw'
         ssc_model = 'off'
         synch_kernel = 'legacy'
+        injection_credit = 'end'
+        remap = 'uniform'
+        threshold_bin = 'edges'
+        ic_cooling = 'table'
         if C.CONSTANTS_SOURCE != 'gsz2009':
             logger.warning(
                 "cpp_compat=True but constants are '%s', not 'gsz2009'. "
@@ -1305,6 +1487,12 @@ def evolve_pwn(
             f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
             f"got {synch_kernel!r}"
         )
+    for _name, _val, _ok in (('injection_credit', injection_credit, ('end', 'midstep')),
+                             ('remap', remap, ('uniform', 'powerlaw')),
+                             ('threshold_bin', threshold_bin, ('edges', 'centre')),
+                             ('ic_cooling', ic_cooling, ('table', 'exact'))):
+        if _val not in _ok:
+            raise ValueError(f"{_name} must be one of {_ok}, got {_val!r}")
     if use_field_lookup and not use_cmb_lookup:
         raise ValueError("use_field_lookup needs use_cmb_lookup=True")
     if ssc_model != 'off' and timestep_cooling == 'compat':
@@ -1409,6 +1597,8 @@ def evolve_pwn(
             ic_j_break=ic_j_break,
             ic_skip_empty_bins=ic_skip_empty_bins)
     pow_ic_elec = calc_pow_ic(phot_grid, pow_nu_ic)
+    if ic_cooling == 'exact':
+        pow_ic_elec = _exact_ic_loss(elec_grid, n_ic, ic_temps, ic_norms)
 
     logger.info("IC backend: %s", "Numba JIT" if HAS_NUMBA else "NumPy (install numba for ~10x speedup)")
 
@@ -1580,6 +1770,7 @@ def evolve_pwn(
     )
 
     _es_scratch = (np.empty(ne), np.empty(ne), np.empty(ne), np.empty(ne))
+    _dep_scratch = (elec_grid.copy(), elec_grid.copy())
 
     # --- Main loop ---
     while time < tmax:
@@ -1656,11 +1847,35 @@ def evolve_pwn(
 
         log_vol_pwn = np.log10(4.0 / 3.0 * np.pi) + 3.0 * np.log10(rad_pwn)
 
+        # Pulsar energy injected over the step
+        if rad_psr > rad_pwn and tcol != -1:
+            depsr_40 = 0.0
+        elif spindown_index == 1:
+            depsr_40 = (1.0 - eta_g) * esd_40 * (
+                np.log(1 + time / tau_sd)
+                - np.log(1 + (time - titer) / tau_sd)
+            )
+        else:
+            depsr_40 = (
+                (1.0 - eta_g) * esd_40 / (1.0 - spindown_index)
+                * (
+                    (1.0 + time / tau_sd) ** (1.0 - spindown_index)
+                    - (1.0 + (time - titer) / tau_sd)
+                    ** (1.0 - spindown_index)
+                )
+            )
+        pl_e = depsr_40 * (1.0 - eta_b) * (1.0 - f_max) if f_max < 1 else 0.0
+        mx_e = depsr_40 * (1.0 - eta_b) * f_max if f_max > 0 else 0.0
+
+        # midstep: mean adiabatic factor over the step
+        f_ad = (0.5 * (1.0 + old_rad_pwn / rad_pwn)
+                if injection_credit == 'midstep' else 1.0)
+
         # Evolve particles
         epwnkin_40, rad_loss_40 = evolve_spectrum(
             old_elec, elec_grid, bpwn, old_rad_pwn, rad_pwn,
             vel_pwn, nelec_40, min_ic_bin_step, pow_ic_elec_step,
-            scratch=_es_scratch,
+            scratch=_es_scratch, remap=remap, threshold_bin=threshold_bin,
         )
 
         # Escape applied before fresh injection
@@ -1682,42 +1897,23 @@ def evolve_pwn(
             epwnkin2_40 = 10.0 ** log_ad * epwnkin2_40 - rad_loss_40
         epwnkin2_40 -= esc_energy_40
 
-        # Pulsar energy injection
-        if rad_psr > rad_pwn and tcol != -1:
-            depsr_40 = 0.0
-            _last_pl_e = 0.0
-            _last_mx_e = 0.0
+        # Inject the step's particles
+        _last_pl_e = pl_e
+        _last_mx_e = mx_e
+        if injection_credit == 'midstep':
+            inj_e = _inject_shifted(elec_grid, _dep_scratch, pl_e, mx_e,
+                                    f_ad, _inject_continuous, kT_max, remap)
         else:
-            if spindown_index == 1:
-                depsr_40 = (1.0 - eta_g) * esd_40 * (
-                    np.log(1 + time / tau_sd)
-                    - np.log(1 + (time - titer) / tau_sd)
-                )
-            else:
-                depsr_40 = (
-                    (1.0 - eta_g) * esd_40 / (1.0 - spindown_index)
-                    * (
-                        (1.0 + time / tau_sd) ** (1.0 - spindown_index)
-                        - (1.0 + (time - titer) / tau_sd)
-                        ** (1.0 - spindown_index)
-                    )
-                )
-
-            # Inject new particles
-            _last_pl_e = 0.0
-            _last_mx_e = 0.0
-            if f_max < 1:
-                pl_e = depsr_40 * (1.0 - eta_b) * (1.0 - f_max)
+            if pl_e > 0.0:
                 _inject_continuous(elec_grid, pl_e)
-                _last_pl_e = pl_e
-            if f_max > 0:
-                _last_mx_e = depsr_40 * (1.0 - eta_b) * f_max
-                inject_maxwellian(elec_grid, _last_mx_e, kT_max)
+            if mx_e > 0.0:
+                inject_maxwellian(elec_grid, mx_e, kT_max)
+            inj_e = (1.0 - eta_b) * depsr_40
 
-        epwnkin_40 += (1.0 - eta_b) * depsr_40
-        epwnkin2_40 += (1.0 - eta_b) * depsr_40
+        epwnkin_40 += inj_e
+        epwnkin2_40 += inj_e
         epwnmag_40_pre = epwnmag_40
-        epwnmag_40 = epwnmag_40 * old_rad_pwn / rad_pwn + eta_b * depsr_40
+        epwnmag_40 = epwnmag_40 * old_rad_pwn / rad_pwn + eta_b * depsr_40 * f_ad
         bpwn = bpwn_calc(epwnmag_40, log_vol_pwn)
         epwn_40 = epwnkin_40 + epwnmag_40
 
@@ -1768,9 +1964,11 @@ def evolve_pwn(
                     np.log10(4.0 / 3.0 * np.pi)
                     + 3.0 * np.log10(rad_pwn)
                 )
+                if injection_credit == 'midstep':
+                    f_ad = 0.5 * (1.0 + old_rad_pwn / rad_pwn)
                 epwnmag_40 = (
                     epwnmag_40_pre * old_rad_pwn / rad_pwn
-                    + eta_b * depsr_40
+                    + eta_b * depsr_40 * f_ad
                 )
                 bpwn = bpwn_calc(epwnmag_40, log_vol_pwn)
                 epwn_40 = epwnkin_40 + epwnmag_40

@@ -359,3 +359,46 @@ def integrate_electron_energy(grid: SpectralGrid) -> float:
         return 0.0
     log_e = grid.log_avg[mask] - C.log_erg + grid.log_number[mask]
     return np.sum(10.0**log_e)
+
+
+def _pl_cdf(e, s):
+    if abs(s - 1.0) < 1e-9:
+        return np.log(e)
+    return e ** (1.0 - s) / (1.0 - s)
+
+
+def place_in_bins_powerlaw(new_mins, new_maxs, values, slopes, occupied,
+                           grid: SpectralGrid) -> None:
+    """Redistribute each mapped interval with density E^-s (local slope)."""
+    n_bins = grid.n_bins
+    abs_max = grid.bin_max[n_bins - 1]
+    gmin, gmax, number = grid.bin_min, grid.bin_max, grid.number
+    for k in np.where(occupied)[0]:
+        nm = new_mins[k]
+        nx = min(new_maxs[k], abs_max - 1.0)
+        if nx < nm:
+            nm, nx = nx, nm
+        v = values[k]
+        lo = min(int(np.searchsorted(gmax, nm, side='left')), n_bins - 1)
+        hi = min(max(int(np.searchsorted(gmin, nx, side='right')) - 1, 0),
+                 n_bins - 1)
+        if hi == lo or nx <= nm:
+            number[lo] += v
+            continue
+        s = slopes[k] if nm > 0.0 else 0.0
+        total = _pl_cdf(nx, s) - _pl_cdf(nm, s)
+        if not (total > 0.0) or not np.isfinite(total):
+            s, total = 0.0, nx - nm
+        acc = 0.0
+        for i in range(lo, hi + 1):
+            a = max(nm, gmin[i])
+            b = min(nx, gmax[i])
+            if b <= a:
+                continue
+            frac = (_pl_cdf(b, s) - _pl_cdf(a, s)) / total
+            if frac > 0.0:
+                frac = min(frac, 1.0)
+                number[i] += frac * v
+                acc += frac
+        if acc < 1.0:
+            number[hi] += (1.0 - acc) * v

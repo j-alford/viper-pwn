@@ -129,6 +129,11 @@ class PWNModel:
         self.ssc_model: str = 'off'
         # synchrotron emission kernel
         self.synch_kernel: str = DEFAULT_SYNCH_KERNEL
+        # numerics corrections, off by default
+        self.injection_credit: str = 'end'
+        self.remap: str = 'uniform'
+        self.threshold_bin: str = 'edges'
+        self.ic_cooling: str = 'table'
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
         # Allowed age range [yr] with tau_sd and the braking index both
@@ -500,6 +505,14 @@ class PWNModel:
             raise ValueError(
                 f"synch_kernel must be one of {sorted(SYNCH_KERNELS)}, "
                 f"got {self.synch_kernel!r}")
+        for name, ok in (('injection_credit', ('end', 'midstep')),
+                         ('remap', ('uniform', 'powerlaw')),
+                         ('threshold_bin', ('edges', 'centre')),
+                         ('ic_cooling', ('table', 'exact'))):
+            val = run_cfg.get(name, ok[0])
+            if val not in ok:
+                raise ValueError(f"{name} must be one of {ok}, got {val!r}")
+            setattr(self, name, val)
 
         # Runner default True; constructor default False.
         self.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
@@ -636,6 +649,10 @@ class PWNModel:
             snapshot_injection=snapshot_injection,
             synch_kernel=self.synch_kernel,
             resolve_final_cooling=getattr(self, 'resolve_final_cooling', False),
+            injection_credit=getattr(self, 'injection_credit', 'end'),
+            remap=getattr(self, 'remap', 'uniform'),
+            threshold_bin=getattr(self, 'threshold_bin', 'edges'),
+            ic_cooling=getattr(self, 'ic_cooling', 'table'),
         )
         return self._result
 
