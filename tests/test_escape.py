@@ -110,9 +110,13 @@ def test_escape_off_is_noop():
 
 def test_escape_on_depletes_energy_dependently():
     """`bohm` escape removes high-E electrons more than low-E ones."""
-    res_base = _cta1_like_model().run(dyn_step=-1)
+    # low density: no reverse-shock compression
+    m_base = _cta1_like_model()
+    m_base.n_ism.value = 0.01 * u.Unit("1 / cm3")
+    res_base = m_base.run(dyn_step=-1)
 
     m_esc = _cta1_like_model()
+    m_esc.n_ism.value = 0.01 * u.Unit("1 / cm3")
     m_esc.escape_model = 'bohm'
     m_esc.parameters['esc_norm'].value = 1.0
     res_esc = m_esc.run(dyn_step=-1)

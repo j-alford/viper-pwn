@@ -293,4 +293,4 @@ def pair_orders(values):
 # evolve_pwn options of the original first-order scheme
 ORIGINAL_SCHEME = dict(injection_credit='end', remap='uniform',
                        threshold_bin='edges', ic_cooling='table',
-                       cooling_field='start')
+                       cooling_field='start', radius_step_frac=None)

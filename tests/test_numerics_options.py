@@ -1,4 +1,7 @@
 """Numerical corrections: each removes a known error of the original scheme."""
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -12,6 +15,7 @@ from viper.radiative import kernels as K
 from viper.model import PWNModel
 from viper.fitting import build_fit_spec
 from viper.source import OPTION_DEFAULTS
+from viper.scalar_params import PWNScalarParams
 
 from _analytic import (ORIGINAL_SCHEME, CoolingHarness, band_ratio,
                        powerlaw_norm,
@@ -156,8 +160,9 @@ FREE = dict(esn_51=1.0, mej=8.0, n_ism=0.1, braking_index=3.0, tau_sd=1e9,
             snapshot_mode='instantaneous')
 
 
-def _free_expansion_excess(integration, credit):
-    r = evolve_pwn(integration=integration, injection_credit=credit, **FREE)
+def _free_expansion_excess(integration, credit, **kw):
+    r = evolve_pwn(integration=integration, injection_credit=credit, **FREE,
+                   **kw)
     rows = [x for x in r.dyninfo if x.time > 0]
     g = lambda a: np.array([getattr(x, a) for x in rows])
     t = g('time') * C.yr
@@ -172,8 +177,8 @@ def _free_expansion_excess(integration, credit):
 @pytest.mark.slow
 @pytest.mark.parametrize('integration', ['euler', 'pc_full'])
 def test_midstep_credit_closes_free_expansion_budget(integration):
-    """End-of-step credit leaves 10-20 % at native dt; mid-step credit < 2 %."""
-    end = _free_expansion_excess(integration, 'end')
+    """End-of-step credit leaves 10-20 % at the original steps; mid-step < 2 %."""
+    end = _free_expansion_excess(integration, 'end', radius_step_frac=None)
     mid = _free_expansion_excess(integration, 'midstep')
     assert 0.08 < end < 0.25
     assert abs(mid) < 2e-2
@@ -200,7 +205,7 @@ def _native_vs_limit(kw, ks=(8, 16)):
     """Native-timestep result over its Richardson limit, minus one."""
     from test_order_of_convergence import _functionals
     from _analytic import refine_dts
-    kw = {k: v for k, v in kw.items() if k not in ALL_ON}
+    kw = {k: v for k, v in kw.items() if k not in ORIGINAL_SCHEME}
     base = evolve_pwn(integration='euler', **kw, **ORIGINAL_SCHEME)
     dts = [float(x.delta_t) for x in base.dyninfo][:-1]
     ref = [evolve_pwn(integration='euler', **kw, **ALL_ON,
@@ -245,8 +250,76 @@ def test_injection_above_a_pev_is_cooled_within_the_step():
 @pytest.mark.slow
 def test_all_options_run_and_conserve_number():
     r0 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5), **ORIGINAL_SCHEME)
-    r1 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5), **ALL_ON)
+    r1 = evolve_pwn(**dict(FREE, eta_b=0.01, e_max=1e5), **ALL_ON,
+                    radius_step_frac=None)
     assert r1.dyninfo[-1].rad_pwn == pytest.approx(r0.dyninfo[-1].rad_pwn,
                                                    rel=3e-2)
     n0, n1 = r0.electron_spectrum.sum(), r1.electron_spectrum.sum()
     assert n1 == pytest.approx(n0, rel=1e-6)
+
+
+# --- radius-change limit on the timestep ------------------------------------------
+
+_GRID_JSON = Path(__file__).resolve().parent / 'reference' / 'grid' / 'grid.json'
+
+
+def _grid_run(name, eps=0.0, **kw):
+    pt = {p['name']: p for p in json.load(open(_GRID_JSON))['points']}[name]
+    p = PWNScalarParams(
+        esn=pt['esn'], mej=pt['mej'] * (1.0 + eps), n_ism=pt['n_ism'],
+        braking_index=pt['braking_index'], tau_sd=pt['tau_sd'],
+        period=pt['period'], p_dot=pt['p_dot'], eta_b=pt['eta_b'],
+        e_min=pt['e_min'], e_max=pt['e_max'], e_break=pt['e_break'],
+        p1=pt['p1'], p2=pt['p2'])
+    return evolve_pwn(
+        esn_51=p.esn, mej=p.mej, n_ism=p.n_ism,
+        braking_index=p.braking_index, tau_sd=p.tau_sd,
+        age=float(p.true_age), e0_37=float(p.e0_37), vel_psr=0.0,
+        eta_g=0.0, eta_b=p.eta_b, e_min=p.e_min, e_max=p.e_max,
+        e_break=p.e_break, p1=p.p1, p2=p.p2, dyn_step=1, **kw)
+
+
+def test_radius_step_default_and_validation():
+    assert OPTION_DEFAULTS['radius_step_frac'] == 0.01
+    assert PWNModel().radius_step_frac == 0.01
+    m = PWNModel()
+    m.apply_run_config({'radius_step_frac': None})
+    assert m.radius_step_frac is None
+    for bad in (0.0, 1.0, -0.1):
+        with pytest.raises(ValueError):
+            PWNModel().apply_run_config({'radius_step_frac': bad})
+
+
+@pytest.mark.slow
+def test_radius_step_limits_every_step():
+    d = _grid_run('lhs_077').dyninfo
+    t = np.array([x.time for x in d])
+    r = np.array([x.rad_pwn for x in d]) * C.pc
+    v = np.array([x.vpwn for x in d]) * 1e5
+    frac = np.abs(v[:-1]) * np.diff(t) * C.yr / r[:-1]
+    assert frac[1:].max() < 0.0101
+    d0 = _grid_run('lhs_077', radius_step_frac=None).dyninfo
+    t0 = np.array([x.time for x in d0])
+    # original rule: steps of a third of the age
+    assert (np.diff(t0)[1:] / t0[1:-1]).max() > 0.2
+
+
+@pytest.mark.slow
+def test_radius_step_makes_compressed_model_reproducible():
+    eps = (-1e-3, 0.0, 1e-3)
+
+    def spread(**kw):
+        r = [_grid_run('lhs_077', e, **kw).dyninfo[-1].rad_pwn for e in eps]
+        return max(r) / min(r)
+
+    assert spread() < 1.05
+    # known error of the original stepping
+    assert spread(radius_step_frac=None) > 1.5
+
+
+@pytest.mark.slow
+def test_cpp_compat_ignores_radius_step():
+    a = _grid_run('g54_baseline', cpp_compat=True)
+    b = _grid_run('g54_baseline', cpp_compat=True, radius_step_frac=None)
+    assert len(a.dyninfo) == len(b.dyninfo)
+    assert a.dyninfo[-1].rad_pwn == b.dyninfo[-1].rad_pwn

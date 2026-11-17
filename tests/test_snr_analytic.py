@@ -116,7 +116,8 @@ def _rows(result):
     t = np.array([x.time for x in rows])
     keep = np.ones(len(rows), bool)
     keep[1:] = np.diff(t) > 0
-    return [x for x, k in zip(rows, keep) if k and x.time > 0]
+    return [x for x, k in zip(rows, keep)
+            if k and x.time > 0 and x.rad_pwn > 0]
 
 
 @pytest.fixture(scope='module', params=['euler', 'pc_full'])
