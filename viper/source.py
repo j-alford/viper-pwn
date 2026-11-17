@@ -71,6 +71,7 @@ OPTION_DEFAULTS = {
     'threshold_bin': 'centre',
     'ic_cooling': 'exact',
     'cooling_field': 'mean',
+    'radius_step_frac': 0.01,
 }
 
 FIT_DEFAULTS = {

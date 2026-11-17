@@ -119,6 +119,7 @@ class _FitSpec:
     threshold_bin: str = 'centre'
     ic_cooling: str = 'exact'
     cooling_field: str = 'mean'
+    radius_step_frac: float | None = 0.01
     known_age: float | None = None
     age_bounds: tuple[float, float] | None = None
 
@@ -208,6 +209,7 @@ def _build_fit_spec(model, observables: list[Observable],
         threshold_bin=getattr(model, 'threshold_bin', 'centre'),
         ic_cooling=getattr(model, 'ic_cooling', 'exact'),
         cooling_field=getattr(model, 'cooling_field', 'mean'),
+        radius_step_frac=getattr(model, 'radius_step_frac', 0.01),
         known_age=known_age,
         age_bounds=getattr(model, 'age_bounds', None),
     )
@@ -291,6 +293,7 @@ def _theta_to_evolve_args(theta: np.ndarray, spec: _FitSpec) -> dict:
         threshold_bin=spec.threshold_bin,
         ic_cooling=spec.ic_cooling,
         cooling_field=spec.cooling_field,
+        radius_step_frac=spec.radius_step_frac,
     )
 
 

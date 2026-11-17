@@ -135,6 +135,7 @@ class PWNModel:
         self.threshold_bin: str = 'centre'
         self.ic_cooling: str = 'exact'
         self.cooling_field: str = 'mean'
+        self.radius_step_frac: float | None = 0.01
         # Known age [yr]: tau_sd follows from the braking index.
         self.known_age: float | None = None
         # Allowed age range [yr] with tau_sd and the braking index both
@@ -515,6 +516,11 @@ class PWNModel:
             if val not in ok:
                 raise ValueError(f"{name} must be one of {ok}, got {val!r}")
             setattr(self, name, val)
+        rsf = run_cfg.get('radius_step_frac', 0.01)
+        if rsf is not None and not 0.0 < float(rsf) < 1.0:
+            raise ValueError(
+                f"radius_step_frac must be None or in (0, 1), got {rsf!r}")
+        self.radius_step_frac = None if rsf is None else float(rsf)
 
         # Runner default True; constructor default False.
         self.use_cmb_lookup = bool(run_cfg.get('use_cmb_lookup', True))
@@ -657,6 +663,7 @@ class PWNModel:
             threshold_bin=getattr(self, 'threshold_bin', 'centre'),
             ic_cooling=getattr(self, 'ic_cooling', 'exact'),
             cooling_field=getattr(self, 'cooling_field', 'mean'),
+            radius_step_frac=getattr(self, 'radius_step_frac', 0.01),
         )
         return self._result
 

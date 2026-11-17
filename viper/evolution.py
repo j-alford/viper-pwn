@@ -222,6 +222,9 @@ def calc_timestep(
     return titer
 
 
+_MIN_RADIUS_STEP_YR = 1e-3
+
+
 # === Electron spectrum evolution ===
 
 def evolve_spectrum(
@@ -1345,6 +1348,7 @@ def evolve_pwn(
     threshold_bin: str = 'centre',
     ic_cooling: str = 'exact',
     cooling_field: str = 'mean',
+    radius_step_frac: Optional[float] = 0.01,
 ) -> PWNModelResult:
     """Evolve a PWN inside an SNR.  Main entry point.
 
@@ -1495,6 +1499,11 @@ def evolve_pwn(
         start and end values) or 'start'.
     Under cpp_compat these five are forced to 'end', 'uniform', 'edges',
     'table', 'start'.
+    radius_step_frac : float, optional
+        Limit each step to this fractional change of the PWN radius,
+        dt <= radius_step_frac * R / |v|, with no 0.5 yr floor (default
+        0.01).  None keeps only the calc_timestep radius rule.  Forced
+        None under cpp_compat.
     """
     if cpp_compat:
         integration = 'euler'
@@ -1512,6 +1521,7 @@ def evolve_pwn(
         threshold_bin = 'edges'
         ic_cooling = 'table'
         cooling_field = 'start'
+        radius_step_frac = None
         if C.CONSTANTS_SOURCE != 'gsz2009':
             logger.warning(
                 "cpp_compat=True but constants are '%s', not 'gsz2009'. "
@@ -1542,6 +1552,11 @@ def evolve_pwn(
         raise ValueError(
             f"timestep_cooling must be 'compat' or 'total_loss10', "
             f"got {timestep_cooling!r}"
+        )
+    if radius_step_frac is not None and not 0.0 < radius_step_frac < 1.0:
+        raise ValueError(
+            f"radius_step_frac must be None or in (0, 1), "
+            f"got {radius_step_frac!r}"
         )
     if escape_model not in ESCAPE_MODELS:
         raise ValueError(
@@ -1893,6 +1908,11 @@ def evolve_pwn(
                     # hand remainder back to sequence
                     _replay_dts.insert(_replay_idx, titer - _capped)
                 titer = _capped
+        if (radius_step_frac is not None and not _from_replay
+                and vel_pwn != 0):
+            _dr = radius_step_frac * abs(rad_pwn / vel_pwn) / C.yr
+            if _dr < titer:
+                titer = max(_dr, _MIN_RADIUS_STEP_YR)
         if resolve_final_cooling and not _from_replay:
             # final window of ~30 default steps: every bin the 0.5 yr
             # floor left under-resolved relaxes over a few cooling times
