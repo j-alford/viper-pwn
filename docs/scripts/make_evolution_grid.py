@@ -72,16 +72,18 @@ GREY = '0.55'
 LEG  = dict(fontsize=14, frameon=False, ncol=3, handlelength=2.2,
             columnspacing=1.6)
 
-# nebula shrinking
-shrink = t[v_pwn < 0]
+# intervals with the nebula shrinking
+neg = np.concatenate(([False], v_pwn < 0, [False]))
+edges = np.flatnonzero(neg[1:] != neg[:-1]).reshape(-1, 2)
+shrink = [(t[i], t[j - 1]) for i, j in edges]
 
 fig, axes = plt.subplots(4, 1, figsize=(10, 8.5), sharex=True, dpi=120,
                          gridspec_kw=dict(hspace=0))
 for ax in axes:
     ax.set_xscale('log')
     ax.set_xlim(10, T_MAX)
-    if shrink.size:
-        ax.axvspan(shrink[0], shrink[-1], color='0.93', lw=0, zorder=0)
+    for t0, t1 in shrink:
+        ax.axvspan(t0, t1, color='0.93', lw=0, zorder=0)
     ax.grid(which='major', color='0.9', lw=0.6)
     ax.set_axisbelow(True)
     ax.tick_params(which='both', direction='in', top=True, right=True,
@@ -98,8 +100,8 @@ ax.plot(t_pos, _pos(rad_pwn), color=BLUE, ls='-',  lw=1.6, label=r'$R_\mathrm{PW
 ax.set_yscale('log')
 ax.set_ylim(4e-4, 3e2)
 ax.set_ylabel('Radius [pc]', fontsize=16)
-if shrink.size:
-    ax.text(shrink[0] * 0.93, 1.2e-2, 'compression by\nreverse shock',
+if shrink:
+    ax.text(shrink[0][0] * 0.93, 1.2e-2, 'compression by\nreverse shock',
             ha='right', va='center', fontsize=13, color='0.35')
 ax.legend(loc='upper left', **LEG)
 
