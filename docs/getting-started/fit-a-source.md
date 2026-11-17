@@ -133,7 +133,7 @@ density is fit when it has bounds, and held fixed otherwise.
 | `OPTIONS` | `integration` | `'pc_full'` |
 | | `constants` (refuse to run under the other constant set) | not checked |
 | | `use_cmb_lookup` | `True` |
-| | `snapshot_mode` | `'secant'` |
+| | `snapshot_mode` | `'instantaneous'` |
 | | `timestep_events` | `False` |
 | | `event_dt_floor_yr` | 0.5 |
 | | `timestep_cooling` | `'compat'` |
