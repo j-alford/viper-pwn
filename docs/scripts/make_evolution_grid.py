@@ -1,4 +1,4 @@
-"""Render the README "Evolution history" 2x2 grid figure.
+"""Render the README "Evolution history" four-panel figure.
 
 Writes docs/images/evolution_grid.png.
 """
@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogLocator, NullFormatter
 import numpy as np
 import astropy.units as u
 
@@ -57,10 +58,8 @@ rad_pwn  = np.array([d.rad_pwn  for d in dyn])
 rad_snr  = np.array([d.rad_snr  for d in dyn])
 rad_rs   = np.array([d.rad_rs   for d in dyn])
 v_pwn    = np.array([d.vpwn     for d in dyn])
-v_ejpwn  = np.array([d.vejpwn   for d in dyn])
 v_snr    = np.array([d.vsnr     for d in dyn])
 bpwn     = np.array([d.bpwn     for d in dyn])
-e_pwn_50 = np.array([d.epwn_50  for d in dyn])
 e_b_50   = np.array([d.epwnb_50 for d in dyn])
 e_p_50   = np.array([d.epwnp_50 for d in dyn])
 
@@ -68,61 +67,80 @@ t_pos = _pos(t)
 T_MAX = float(np.nanmax(t_pos))
 
 
-fig = plt.figure(figsize=(11, 9), constrained_layout=True, dpi=110)
-gs  = fig.add_gridspec(2, 2)
+mpl.rcParams['font.size'] = 14
+GREY = '0.55'
+LEG  = dict(fontsize=14, frameon=False, ncol=3, handlelength=2.2,
+            columnspacing=1.6)
 
-# --- top-left: radii ---
-ax = fig.add_subplot(gs[0, 0])
-ax.loglog(t_pos, _pos(rad_pwn), color=BLUE, ls='-',
-          label=r'$R_\mathrm{PWN}$')
-ax.loglog(t_pos, _pos(rad_snr), color=RED, ls='-',
-          label=r'$R_\mathrm{SNR}$')
-ax.loglog(t_pos, _pos(rad_rs),  color=RED, ls='--',
-          label=r'$R_\mathrm{RS}$')
-ax.set_xlim(1, T_MAX)
-ax.set_xlabel('Time [yr]')
-ax.set_ylabel('Radius [pc]')
-ax.grid(which='major', alpha=0.3)
-ax.legend(fontsize=12, frameon=False)
+# nebula shrinking
+shrink = t[v_pwn < 0]
 
-# --- top-right: velocities ---
-ax = fig.add_subplot(gs[0, 1])
-ax.plot(t_pos, v_pwn,   color=BLUE, ls='-',  label=r'$v_\mathrm{PWN}$')
-ax.plot(t_pos, v_ejpwn, color=BLUE, ls='--', label=r'$v_\mathrm{ej,PWN}$')
-ax.plot(t_pos, v_snr,   color=RED,  ls='-',  label=r'$v_\mathrm{SNR}$')
-ax.set_xscale('log')
-ax.set_yscale('symlog', linthresh=1)
-ax.set_xlim(1, T_MAX)
-ax.set_xlabel('Time [yr]')
-ax.set_ylabel('Velocity [km s$^{-1}$]')
-ax.grid(which='major', alpha=0.3)
-ax.legend(fontsize=12, frameon=False)
+fig, axes = plt.subplots(4, 1, figsize=(10, 8.5), sharex=True, dpi=120,
+                         gridspec_kw=dict(hspace=0))
+for ax in axes:
+    ax.set_xscale('log')
+    ax.set_xlim(10, T_MAX)
+    if shrink.size:
+        ax.axvspan(shrink[0], shrink[-1], color='0.93', lw=0, zorder=0)
+    ax.grid(which='major', color='0.9', lw=0.6)
+    ax.set_axisbelow(True)
+    ax.tick_params(which='both', direction='in', top=True, right=True,
+                   labelsize=14)
+    ax.tick_params(which='major', length=5)
+    ax.tick_params(which='minor', length=2.5)
+axes[-1].set_xlabel('Time [yr]', fontsize=16)
 
-# --- bottom-left: B-field ---
-ax = fig.add_subplot(gs[1, 0])
-ax.loglog(t_pos, _pos(bpwn), color=BLUE, ls='-', label=r'$B_\mathrm{PWN}$')
-ax.set_xlim(1, T_MAX)
+# --- radii ---
+ax = axes[0]
+ax.plot(t_pos, _pos(rad_snr), color=RED,  ls='-',  lw=1.6, label=r'$R_\mathrm{SNR}$')
+ax.plot(t_pos, _pos(rad_rs),  color=RED,  ls='--', lw=1.6, label=r'$R_\mathrm{RS}$')
+ax.plot(t_pos, _pos(rad_pwn), color=BLUE, ls='-',  lw=1.6, label=r'$R_\mathrm{PWN}$')
+ax.set_yscale('log')
+ax.set_ylim(4e-4, 3e2)
+ax.set_ylabel('Radius [pc]', fontsize=16)
+if shrink.size:
+    ax.text(shrink[0] * 0.93, 1.2e-2, 'compression by\nreverse shock',
+            ha='right', va='center', fontsize=13, color='0.35')
+ax.legend(loc='upper left', **LEG)
+
+# --- velocities ---
+ax = axes[1]
+ax.axhline(0, color=GREY, lw=0.6)
+ax.plot(t_pos, v_snr,   color=RED,  ls='-',  lw=1.6, label=r'$v_\mathrm{SNR}$')
+ax.plot(t_pos, v_pwn,   color=BLUE, ls='-',  lw=1.6, label=r'$v_\mathrm{PWN}$')
+ax.set_yscale('symlog', linthresh=100, linscale=1.0)
+ax.set_yticks([-1e3, -1e2, 0, 1e2, 1e3, 1e4])
+ax.set_ylim(-6e3, 1e5)
+ax.set_ylabel(r'Velocity [km s$^{-1}$]', fontsize=16)
+ax.legend(loc='lower left', **LEG)
+
+# --- B-field ---
+ax = axes[2]
+ax.plot(t_pos, _pos(bpwn), color=BLUE, ls='-', lw=1.6, label=r'$B_\mathrm{PWN}$')
+ax.set_yscale('log')
 ax.set_ylim(1, 1e6)
-ax.set_xlabel('Time [yr]')
-ax.set_ylabel(r'$B$ [$\mu$G]')
-ax.grid(which='major', alpha=0.3)
-ax.legend(fontsize=12, frameon=False)
+ax.set_yticks([1e1, 1e3, 1e5])
+ax.set_ylabel(r'$B$ [$\mu$G]', fontsize=16)
+ax.legend(loc='lower left', **LEG)
 
-# --- bottom-right: energies (10^50 erg -> erg) ---
-ax = fig.add_subplot(gs[1, 1])
-ax.loglog(t_pos, _pos(e_pwn_50) * 1e50, color=BLUE, ls='-',
-          label=r'$E_\mathrm{PWN}$')
-ax.loglog(t_pos, _pos(e_b_50)   * 1e50, color=RED,  ls='-',
-          label=r'$E_B$')
-ax.loglog(t_pos, _pos(e_p_50)   * 1e50, color=RED,  ls='--',
-          label=r'$E_p$')
-ax.set_xlim(1, T_MAX)
-ax.set_xlabel('Time [yr]')
-ax.set_ylabel('Energy [erg]')
-ax.grid(which='major', alpha=0.3)
-ax.legend(fontsize=12, frameon=False)
+# --- energies (10^50 erg -> erg) ---
+ax = axes[3]
+ax.plot(t_pos, _pos(e_p_50) * 1e50, color=BLUE, ls='-',  lw=1.6, label=r'$E_\mathrm{particles}$')
+ax.plot(t_pos, _pos(e_b_50) * 1e50, color=BLUE, ls='--', lw=1.6, label=r'$E_B$')
+ax.set_yscale('log')
+ax.set_ylim(1e43, 1e50)
+ax.set_yticks([1e44, 1e46, 1e48])
+ax.set_ylabel('Energy [erg]', fontsize=16)
+ax.legend(loc='upper left', **LEG)
+
+for ax in (axes[0], axes[2], axes[3]):
+    ax.yaxis.set_minor_locator(LogLocator(base=10, subs=(1.0,), numticks=20))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+fig.align_ylabels(axes)
+fig.subplots_adjust(left=0.105, right=0.985, top=0.985, bottom=0.075)
 
 out_path = os.path.join(OUT, 'evolution_grid.png')
-fig.savefig(out_path, dpi=110)
+fig.savefig(out_path, dpi=120)
 plt.close(fig)
 print(f"Wrote {out_path}")
